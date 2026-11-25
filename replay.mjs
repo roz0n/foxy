@@ -2,7 +2,7 @@
 // Replays a captured Foxy log (JSONL) into a running Foxy server, as if the app were sending it live.
 // Handy for demoing the dashboard or re-analysing an old capture without relaunching the app.
 //
-//   node scripts/foxy/replay.mjs [logfile] [port]
+//   node replay.mjs [logfile] [port]
 //
 // logfile defaults to logs/foxy.jsonl, port to FOXY_PORT or 8098.
 import { readFileSync } from 'node:fs';

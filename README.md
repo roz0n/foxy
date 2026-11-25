@@ -1,4 +1,4 @@
-# 🦊 Foxy (developer tooling)
+# 🦊 Foxy
 
 Captures **every** `fetch` / `XMLHttpRequest` the app makes, with the JS stack that initiated it, and shows them in a live dashboard. Built for auditing which requests happen on which screen (e.g. TRAM-4463: Onboarding on a fresh install). Debug builds only; opt-in.
 
@@ -6,28 +6,34 @@ Unlike Charles/Proxyman it knows *who* made the call (symbolicated through Metro
 
 ## Run
 
-Switch to this branch, then:
+**The app (recommended).** Open `Foxy-<version>-arm64.dmg`, drag Foxy to Applications and double-click it. The first time, it asks for your MetaMask Mobile checkout (a folder whose `package.json` is named `metamask`). Foxy reads that folder for code owners and screen definitions, and sets `export FOXY="true"` in its `.js.env`. Change the folder any time from **Foxy > Choose MetaMask Mobile Folder…**. The window is the dashboard at <http://localhost:8098>, which also works in any browser.
+
+Foxy is not signed with an Apple Developer ID, so macOS blocks the first launch of a downloaded copy. Right-click it and choose Open, or run `xattr -dr com.apple.quarantine /Applications/Foxy.app` once. Closing the window leaves Foxy recording (click the Dock icon to bring it back); Quit stops it.
+
+**From source.** Needs Node 20+ and a MetaMask Mobile checkout on the branch that has the in-app bridge (`app/dev-tools/Foxy`).
 
 ```bash
-yarn install
-yarn foxy        # prepares everything below, then serves http://localhost:8098
+npm install
+npm run desktop                                  # the Electron app, same as the binary
+FOXY_REPO=/path/to/metamask-mobile npm start     # or just the server, then open http://localhost:8098
+npm run dist                                     # builds dist/Foxy-<version>-arm64.dmg and .zip
 ```
 
-`yarn foxy` runs `scripts/foxy/setup.mjs` first. It is safe to run any number of times, and it:
+`npm start` runs `setup.mjs` first and then the server. `FOXY_REPO` is the MetaMask Mobile checkout (default: the current folder). Setup is safe to run any number of times, and it:
 
-- turns on `export FOXY="true"` in `.js.env` (creating the file from `.js.env.example` if it is missing; `FOXY_URL` and `FOXY_BODIES` are never touched);
+- turns on `export FOXY="true"` in the app's `.js.env` (creating the file from `.js.env.example` if it is missing; `FOXY_URL` and `FOXY_BODIES` are never touched);
 - tells you when Metro has to be restarted with `yarn watch:clean` because of that change, and warns if Metro is not running;
 - runs `adb reverse tcp:8098 tcp:8098` for every attached Android device or emulator;
 - prints the exact `FOXY_URL` line for a physical iPhone (your Mac's LAN address);
-- downloads the core monorepo's `CODEOWNERS` into `scripts/foxy/.cache/` when there is no `../core` checkout, so `@metamask/*` calls get team chips;
+- downloads the core monorepo's `CODEOWNERS` into the Foxy cache folder when there is no `../core` checkout next to the app, so `@metamask/*` calls get team chips;
 - reports a busy port, or exits quietly when Foxy is already running;
-- installs the `foxy` agent skill (`scripts/foxy/skill/skill.md`) into `.claude/skills`, `.agents/skills` and `.cursor/skills`, which are gitignored. Skip it with `FOXY_SKIP_SKILL=1`.
+- installs the `foxy` agent skill (`skill/skill.md`) into `.claude/skills`, `.agents/skills` and `.cursor/skills` of the app checkout, which are gitignored. Skip it with `FOXY_SKIP_SKILL=1`.
 
-`node scripts/foxy/setup.mjs --check` prints the same checklist without changing anything.
+`node setup.mjs --check` prints the same checklist without changing anything. The app keeps its settings and cache in `~/Library/Application Support/Foxy` (**Foxy > Show Data Folder**), including the raw log `logs/foxy.jsonl`.
 
 Then:
 
-1. Start the debug app (`yarn start:ios` / `yarn start:android`, no native rebuild is needed for JS changes). Android: re-run `yarn foxy` after plugging a device in. Physical iOS device: add the `FOXY_URL` line it printed to `.js.env` and restart Metro.
+1. Start the debug app (`yarn start:ios` / `yarn start:android` in the MetaMask Mobile checkout, no native rebuild is needed for JS changes). Android: restart Foxy after plugging a device in. Physical iOS device: add the `FOXY_URL` line it printed to `.js.env` and restart Metro.
 2. Fresh install (delete the app or wipe data), launch, and watch the Timeline. Press `M` (or the **Markers** button beside Filters) and drop a marker (e.g. `Onboarding visible`, `Wallet created`) as things happen to split the capture into phases. Press `?` for the in-app guide.
 
 Keep Metro running on `:8081` (override with `FOXY_METRO`) so stacks are symbolicated to `app/...` and `@metamask/...` frames.
@@ -64,13 +70,13 @@ Keep Metro running on `:8081` (override with `FOXY_METRO`) so stacks are symboli
 - **Columns**: number-like columns (ID, Time, Method, Status, Duration, and Calls / Avg Duration / First in Endpoints) size themselves to the widest value in the capture, within a realistic range, so digits never clip as the numbers grow. The other columns share the remaining width and can be dragged to resize.
 - **Default column order** reads left to right as when, who, what, outcome: Timeline is ID, Time, Code owners, Call site, Launched from, Method, Host, Path, Status, Duration, Waterfall. Endpoints is Phase, First, Code owners, Call sites, Endpoint, Calls, Identical dupes, Statuses, Avg Duration, Activity (plus Verdict while auditing). Saved layouts from older versions are ignored once so you get this order; **Reset columns** restores it any time.
 - **Launched from view**: every request records the screen the app was showing when it was made. The Timeline's **Launched from** column shows it at a glance: the screen name, the navigators just above it, and an `on mount` flag when the request fired as the screen appeared (sortable by screen; a build that does not report it reads "(not reported)"). Open a request and the strip at the top of its detail names the screen, the navigator path to it (`Main › SwapsAmountView`), how long the screen had been showing (a request fired within half a second of a screen opening is flagged, since it is most likely triggered by mounting it), the app state when it is not in the foreground, and the screen's param *names* (never values). Requests made before the navigator mounted read "Before navigation was ready". The Filters panel has a **Screen** section, and the filter box matches screen names. The app side lives in `app/dev-tools/Foxy/FoxyView.ts` and is registered from `NavigationService` only when `FOXY="true"`. Rebuild the app once to start sending it; older captures show "Not reported".
-  - **Package links**: call-chain frames from `node_modules` link to the package's source on GitHub. MetaMask packages (`@metamask/*`) link to the release tag in `MetaMask/core` at the line behind the published `dist` file, using its source map (for example `src/api/base-client.ts:194`). Packages from other repos link to the file and line at their release tag (`v<version>` or `<name>@<version>`, read with `git ls-remote` the first time a repo is needed) when they ship a source map. Anything else links to the release folder or the repository front page, and frames with no repository stay plain text. This is in `scripts/foxy/packages.mjs`.
-  - **Source link**: the strip also shows where the screen is defined, as `file:line`, linked to that line on GitHub (the same `FOXY_GITHUB_*` settings as call-site links apply). Foxy works this out on the server by reading the `<Stack.Screen name component>` tags in `app/` (`scripts/foxy/views.mjs`), following imports, `#app/*` aliases and re-exports to the component's declaration, and shows a "Registered in" link when the navigator that mounts it is somewhere else. It is static analysis re-run at most every 15s, so lines follow your edits. Config-driven screens are read too: a `{ key, name }` object (such as a bottom tab definition) is joined to a `{ key: Component }` map on the same key, and a navigator that is itself a screen (`initialRouteName`) is followed to the screen it opens first. Screens none of these reach fall back to a file named after the route, labelled "Best match", and otherwise show no link.
+  - **Package links**: call-chain frames from `node_modules` link to the package's source on GitHub. MetaMask packages (`@metamask/*`) link to the release tag in `MetaMask/core` at the line behind the published `dist` file, using its source map (for example `src/api/base-client.ts:194`). Packages from other repos link to the file and line at their release tag (`v<version>` or `<name>@<version>`, read with `git ls-remote` the first time a repo is needed) when they ship a source map. Anything else links to the release folder or the repository front page, and frames with no repository stay plain text. This is in `packages.mjs`.
+  - **Source link**: the strip also shows where the screen is defined, as `file:line`, linked to that line on GitHub (the same `FOXY_GITHUB_*` settings as call-site links apply). Foxy works this out on the server by reading the `<Stack.Screen name component>` tags in `app/` (`views.mjs`), following imports, `#app/*` aliases and re-exports to the component's declaration, and shows a "Registered in" link when the navigator that mounts it is somewhere else. It is static analysis re-run at most every 15s, so lines follow your edits. Config-driven screens are read too: a `{ key, name }` object (such as a bottom tab definition) is joined to a `{ key: Component }` map on the same key, and a navigator that is itself a screen (`initialRouteName`) is followed to the screen it opens first. Screens none of these reach fall back to a file named after the route, labelled "Best match", and otherwise show no link.
 - **Big captures**: the Timeline and Endpoints lists are virtualized, so only the rows near the viewport exist in the page (about 50, however long the capture). Scrolling, filtering and jumping to a request, phase or strip bar stay fast with tens of thousands of requests, and the view stays put when new requests arrive while you are scrolled down the list.
 - **Play / pause**: the round button in the header freezes the view while Foxy keeps recording. A badge counts the requests being held. Press play and they appear, with a divider in the Timeline (when you paused, for how long, and how many requests arrived while paused) so you can tell them from what was already on screen.
 - **Filters**: the button at the right of the filter row (or `F`) opens a panel styled like Markers. Pick several code owners, statuses, methods or hosts (any of them matches), flip a section to "Is not" to exclude instead, match owners on the call site, the code that started it, or either, and set a minimum duration. Star your teams in the list and the **My teams** quick filter shows only their requests (stored in the browser). Active filters appear as removable pills.
 - **GitHub links**: in a request's call chain, the file path of every app and project frame opens that file at that line on GitHub (`#L<line>`, GitHub cannot highlight a column). Packages and `@metamask/*` frames stay plain text because their frames point at built `dist` files, not source. Foxy links to your `origin` repo at `HEAD` when it is on a remote branch, otherwise at the merge-base with `origin/main`, so the lines match the running code. Set `FOXY_GITHUB_REPO=owner/name` and `FOXY_GITHUB_REF=<branch|sha>` to override (for example once your branch is pushed). Unpushed local edits can shift line numbers.
-- **Logo**: the header and guide use the animated MetaMask fox (`vendor/foxy-loading.riv`, played with the vendored Rive web runtime). It loops forever while the feed is live; when you pause, he stops and faces straight ahead (a second, never-played copy of the artboard, because the loop cannot be scrubbed to that pose), and he starts looking around again on play. People who prefer reduced motion get the still fox all the time, and falls back to the 🦊 emoji if the files are missing. Restart `yarn foxy` after pulling so the server serves `/vendor/*`.
+- **Logo**: the header and guide use the animated MetaMask fox (`vendor/foxy-loading.riv`, played with the vendored Rive web runtime). It loops forever while the feed is live; when you pause, he stops and faces straight ahead (a second, never-played copy of the artboard, because the loop cannot be scrubbed to that pose), and he starts looking around again on play. People who prefer reduced motion get the still fox all the time, and falls back to the 🦊 emoji if the files are missing. 
 - **Menu**: the hamburger holds the Theme picker (Dark, Light, Navy, Orange; saved in the browser), Time format, Reset columns, Export… and Clear (a fresh capture: request IDs start again at 1 and the clock at +0s from that moment). Durations show their unit (`212 ms`, then `1.24 s` from a second up). Keyboard: `1` and `2` switch between Timeline and Endpoints, `/` focuses the filter, `M` opens markers, `E` stops the running phase (press it again to resume it) and `P` pauses or resumes live updates. `Esc` closes whatever panel is open first; with nothing open it folds the row you opened in the current tab. The shortcuts are ignored while you type in a field.
 - **Exports**: every download button (a phase header, a phase row in the Markers panel, the divider between phases, **Export Audit**, and **Export…** in the hamburger menu) opens one dialog. Pick a format, then tap the button at the bottom (it reads *Download JSON*, *Download CSV* or *Copy Markdown* to match). The format you pick is remembered for next time. The title shows what is being exported.
   - **JSON, full detail**: for a phase, every request in full (headers, bodies, call chain with owners and GitHub links) plus the phase totals; for the whole capture, `foxy-capture-<time>.json` with `foxy` (export time, session, platform, build), `summary`, `markers`, `phases` and `requests` in time order. Both ignore filters and Pause. Scripts: `GET /api/export/phase?marker=<id>` and `GET /api/export/capture` (`?session=<id>`, 404 for an unknown one).
@@ -78,14 +84,18 @@ Keep Metro running on `:8081` (override with `FOXY_METRO`) so stacks are symboli
   - **Markdown table**: copied, not saved. For a phase it is the audit table (phase window, counts by verdict, a row per endpoint with verdict and reason); for the whole capture it is the phases table plus the Endpoints table. Also `GET /api/export`.
   - **JSON for an agent** (phases only): the verdicts, reasons and call sites with instructions an AI agent can act on (`foxy-audit-<phase>.json`).
   - For the whole capture, when filters are active a checkbox offers to export only what they show (CSV and Markdown; the full JSON always has everything).
-- Raw log: `scripts/foxy/logs/foxy.jsonl`.
-- Replay an old capture into a running dashboard (no app needed): `node scripts/foxy/replay.mjs [logfile] [port]`.
+- Raw log: `logs/foxy.jsonl` in the data folder (the app) or the Foxy folder (from source); `FOXY_LOG_FILE` overrides it.
+- Replay an old capture into a running dashboard (no app needed): `node replay.mjs [logfile] [port]`.
 
 ## Agent access (MCP)
 
+The app can copy a ready config: **Foxy > Copy MCP Config…**. It runs `mcp.mjs` through the Foxy binary itself, so nothing else has to be installed:
+
 ```bash
-claude mcp add foxy -- node scripts/foxy/mcp.mjs
+claude mcp add foxy -e ELECTRON_RUN_AS_NODE=1 -- /Applications/Foxy.app/Contents/MacOS/Foxy /Applications/Foxy.app/Contents/Resources/app/mcp.mjs
 ```
+
+From source: `claude mcp add foxy -- node /path/to/foxy/mcp.mjs`. The MCP server talks to a running Foxy on `FOXY_PORT` (default 8098).
 
 Tools:
 
@@ -111,4 +121,4 @@ Big exports go to a file, not into the agent's context: `$TMPDIR/foxy/` by defau
 
 ## Tests
 
-`node --test scripts/foxy/*.test.mjs` and `yarn jest app/dev-tools/Foxy`.
+`npm test` (the two tests that read real CODEOWNERS files are skipped unless `FOXY_REPO` and `FOXY_CORE` point at a MetaMask Mobile and a MetaMask core checkout). `npm run smoke` starts the desktop shell headless and checks the dashboard answers. The in-app bridge has its own Jest tests in the MetaMask Mobile repo: `yarn jest app/dev-tools/Foxy`.

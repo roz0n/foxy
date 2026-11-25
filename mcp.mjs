@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Minimal zero-dependency MCP (stdio) server so an agent can query the network
-// audit server:  claude mcp add foxy -- node scripts/foxy/mcp.mjs
+// audit server:  claude mcp add foxy -- node /path/to/foxy/mcp.mjs
 // It is a thin wrapper over the REST API in server.mjs (default http://localhost:8098).
 import { createInterface } from 'node:readline';
 import { mkdir, writeFile } from 'node:fs/promises';

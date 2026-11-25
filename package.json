@@ -1,13 +1,69 @@
 {
   "name": "foxy",
+  "productName": "Foxy",
   "version": "0.1.0",
+  "description": "Network request auditor for MetaMask Mobile: every fetch and XHR, the code that made it, the screen it came from and the team that owns it.",
   "private": true,
   "type": "module",
+  "main": "desktop/main.mjs",
   "scripts": {
-    "start": "node server.mjs",
-    "test": "node --test lib.test.mjs"
+    "start": "bash run.sh",
+    "server": "node server.mjs",
+    "desktop": "electron .",
+    "test": "node --test *.test.mjs desktop/*.test.mjs",
+    "smoke": "FOXY_SMOKE=1 FOXY_PORT=18098 FOXY_DATA_DIR=$(mktemp -d) electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "io.metamask.foxy",
+    "productName": "Foxy",
+    "asar": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "desktop/main.mjs",
+      "desktop/helpers.mjs",
+      "server.mjs",
+      "lib.mjs",
+      "mcp.mjs",
+      "codeowners.mjs",
+      "views.mjs",
+      "packages.mjs",
+      "setup.mjs",
+      "dashboard.html",
+      "package.json",
+      "pwa/**",
+      "vendor/**",
+      "skill/**"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "identity": "-",
+      "hardenedRuntime": false
+    }
   }
 }

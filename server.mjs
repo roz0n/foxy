@@ -34,11 +34,13 @@ import {
 const PORT = Number(process.env.FOXY_PORT || 8098);
 const METRO = process.env.FOXY_METRO || 'http://localhost:8081';
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// CODEOWNERS: the app repo (app/... frames) and the core monorepo (@metamask/<pkg> frames).
-const REPO = process.env.FOXY_REPO || join(__dirname, '..', '..');
-// Core's CODEOWNERS: a sibling checkout wins, otherwise the copy setup.mjs keeps in .cache/core.
+// The MetaMask Mobile checkout Foxy reads: its CODEOWNERS (app/... frames), its screens, its git remote. Set FOXY_REPO, or run Foxy from inside it.
+const REPO = process.env.FOXY_REPO || process.cwd();
+// Where Foxy keeps things it downloads (a copy of core's CODEOWNERS). The desktop app points this at its own data folder.
+const CACHE_DIR = process.env.FOXY_CACHE_DIR || join(__dirname, '.cache');
+// Core's CODEOWNERS (@metamask/<pkg> frames): a sibling checkout wins, otherwise the copy setup.mjs keeps in the cache.
 const CORE = process.env.FOXY_CORE
-  || (existsSync(join(REPO, '..', 'core', '.github', 'CODEOWNERS')) ? join(REPO, '..', 'core') : join(__dirname, '.cache', 'core'));
+  || (existsSync(join(REPO, '..', 'core', '.github', 'CODEOWNERS')) ? join(REPO, '..', 'core') : join(CACHE_DIR, 'core'));
 const repoRules = loadCodeowners(join(REPO, '.github', 'CODEOWNERS'));
 const coreRules = loadCodeowners(join(CORE, '.github', 'CODEOWNERS'));
 /**
@@ -363,9 +365,11 @@ const httpServer = createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(await readFile(join(__dirname, 'dashboard.html'), 'utf-8'));
     } else if (p === '/font/grotzec-cond-bold.otf') {
-      // the wordmark face, read from the app's font folder (not copied) so there is one source of truth
+      // the wordmark face, read from the app's font folder (not copied) so there is one source of truth; without an app folder the wordmark falls back to the system font
+      const font = join(REPO, 'app', 'fonts', 'GrotzecCond', 'GrotzecCond-Bold.otf');
+      if (!existsSync(font)) { res.writeHead(404); res.end(); return; }
       res.writeHead(200, { 'content-type': 'font/otf', 'cache-control': 'public, max-age=3600' });
-      res.end(await readFile(join(REPO, 'app', 'fonts', 'GrotzecCond', 'GrotzecCond-Bold.otf')));
+      res.end(await readFile(font));
     } else if (p.startsWith('/vendor/')) {
       // the Rive runtime and the animated logo, served from disk so the dashboard works offline
       const name = p.slice('/vendor/'.length);
@@ -627,3 +631,7 @@ httpServer.listen(PORT, () => {
   console.log(`  Owners:    app CODEOWNERS ${repoRules ? 'loaded' : 'NOT found'}, core CODEOWNERS ${coreRules ? 'loaded' : `NOT found (${CORE})`}\n`);
   console.log('  Waiting for the app (set FOXY="true" in .js.env, restart Metro)...\n');
 });
+
+/** For the desktop app, which starts this module in-process: the HTTP server (`address().port` is the real port) and what it was set up with. */
+export const server = httpServer;
+export const config = { port: PORT, repo: REPO, cacheDir: CACHE_DIR, logFile: LOG_FILE, auditFile: AUDIT_FILE, metro: METRO };

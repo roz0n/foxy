@@ -56,16 +56,19 @@ test('resolveFrameOwners maps app -> repo rules and @metamask/<pkg> -> core pack
 
 // Sanity check against the real files when present (skipped otherwise).
 const here = dirname(fileURLToPath(import.meta.url));
-const mobile = join(here, '..', '..', '.github', 'CODEOWNERS');
-const core = join(here, '..', '..', '..', 'core', '.github', 'CODEOWNERS');
+// These two read the real CODEOWNERS files, so they need a MetaMask Mobile checkout: run with FOXY_REPO=/path/to/metamask-mobile
+// (and FOXY_CORE=/path/to/core, or a `core` folder next to it). Without them they are skipped.
+const repo = process.env.FOXY_REPO;
+const mobile = repo ? join(repo, '.github', 'CODEOWNERS') : '';
+const core = process.env.FOXY_CORE ? join(process.env.FOXY_CORE, '.github', 'CODEOWNERS') : repo ? join(repo, '..', 'core', '.github', 'CODEOWNERS') : '';
 
-test('real mobile CODEOWNERS: design system and Engine.ts', { skip: !existsSync(mobile) }, () => {
+test('real mobile CODEOWNERS: design system and Engine.ts', { skip: !mobile || !existsSync(mobile) }, () => {
   const real = loadCodeowners(mobile);
   assert.deepEqual(ownersFor(real, 'app/component-library/components/Texts/Text/Text.tsx'), ['@MetaMask/design-system-engineers']);
   assert.deepEqual(ownersFor(real, 'app/core/Engine/Engine.ts'), ['@MetaMask/mobile-platform']);
 });
 
-test('real core CODEOWNERS: assets-controllers', { skip: !existsSync(core) }, () => {
+test('real core CODEOWNERS: assets-controllers', { skip: !core || !existsSync(core) }, () => {
   const real = loadCodeowners(core);
   assert.deepEqual(ownersFor(real, 'packages/assets-controllers/src/index.ts'), ['@MetaMask/metamask-assets']);
 });
