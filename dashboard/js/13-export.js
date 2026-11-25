@@ -21,13 +21,13 @@ function requestsCsv(list = [...reqs.values()].filter(match)) {
   ]));
 }
 function endpointsCsv(list = [...reqs.values()].filter(match)) {
-  const head = ['Phase', 'Endpoint', 'Method', 'Host', 'Path', 'Calls', 'Identical dupes', 'Failed', 'Statuses', 'Avg (ms)', 'P95 (ms)', 'Bytes', 'First call (s)', 'First call at', 'Last call at', 'Code owners', 'Call site', 'Verdict', 'Reason'];
+  const head = ['Phase', 'Endpoint', 'Method', 'Host', 'Path', 'Calls', 'Identical dupes', 'Failed', 'Statuses', 'Avg (ms)', 'P95 (ms)', 'Bytes', 'First call (s)', 'First call at', 'Last call at', 'Launched from', 'Code owners', 'Call site', 'Verdict', 'Reason'];
   const groups = buildGroups(list).sort((a, b) => a.first - b.first);
   return toCsv(head, groups.map((g) => {
     const v = auditOf(phaseOfGroup(g), g.k), site = [...g.sites.values()][0]?.info;
     return [
       phaseOfGroup(g)?.label || '', g.k, g.method, g.host, g.path, g.n, g.dupes, g.failed, Object.entries(g.st).map(([s, n]) => `${s === '…' ? 'pending' : s}x${n}`).join(' '),
-      g.avg, g.p95 == null ? null : Math.round(g.p95), g.bytesTotal, Number(sec(g.first)), isoLocal(g.firstAt), isoLocal(g.lastAt), g.ownerText, siteText(site),
+      g.avg, g.p95 == null ? null : Math.round(g.p95), g.bytesTotal, Number(sec(g.first)), isoLocal(g.firstAt), isoLocal(g.lastAt), screensOf(g), g.ownerText, siteText(site),
       VERDICTS.find((x) => x.id === v.v)?.label || '', v.note || '',
     ];
   }));
@@ -56,12 +56,20 @@ function exportFormats(scope) {
     run: async () => { await downloadFromServer(ph ? '/api/export/phase?marker=' + encodeURIComponent(ph.id) : '/api/export/capture', 'foxy-export.json'); return 'Saved'; },
   };
   const csvReq = { id: 'csv-req', title: 'CSV, one row per request', tag: '.csv', verb: 'Download CSV', desc: 'Time, phase, method, host, path, status, duration, size, owners and call site. Opens in a spreadsheet.', run: async () => save(await csvWith(requestsCsv(list())), `foxy-${slug}-requests-${stamp}.csv`, 'text/csv;charset=utf-8') };
-  const csvEp = { id: 'csv-ep', title: 'CSV, one row per endpoint', tag: '.csv', verb: 'Download CSV', desc: 'Calls, dupes, failures, timings, owners and call site, with the verdict and reason you gave each one.', run: async () => save(await csvWith(endpointsCsv(list())), `foxy-${slug}-endpoints-${stamp}.csv`, 'text/csv;charset=utf-8') };
-  const mdText = async () => (await facts('md')) + (ph ? auditMarkdown(ph) : endpointsMarkdown(list()));
-  const md = { id: 'md', title: 'Markdown table, copy', tag: 'copies', verb: 'Copy Markdown', desc: 'A table to paste wherever you are writing this up.', keepOpen: true, run: async () => { await copyText(await mdText()); return 'Copied!'; } };
-  const mdFile = { id: 'md-file', title: 'Markdown file', tag: '.md', verb: 'Download Markdown', desc: 'The same table, saved as a file you can attach to a PR or a ticket.', run: async () => save(await mdText(), `foxy-${slug}-${ph ? 'audit' : 'endpoints'}-${stamp}.md`, 'text/markdown;charset=utf-8') };
+  const csvEp = { id: 'csv-ep', title: 'CSV, one row per endpoint', tag: '.csv', verb: 'Download CSV', desc: 'Calls, dupes, failures, timings, launched-from screens, owners and call site, with the verdict and reason you gave each one.', run: async () => save(await csvWith(endpointsCsv(list())), `foxy-${slug}-endpoints-${stamp}.csv`, 'text/csv;charset=utf-8') };
+  // A phase's markdown comes from the server, built from the same audit document the agent JSON uses (the verdicts are saved first), so the
+  // table and the per-endpoint drilldown can never disagree with it.
+  const auditMd = async () => {
+    await flushAudits().catch(() => {});
+    const res = await fetch('/api/audit/export?format=md&phase=' + encodeURIComponent(ph.id));
+    if (!res.ok) throw new Error('audit export failed');
+    return res.text();
+  };
+  const mdText = async () => (ph ? auditMd() : (await facts('md')) + endpointsMarkdown(list()));
+  const md = { id: 'md', title: 'Markdown table, copy', tag: 'copies', verb: 'Copy Markdown', desc: ph ? 'The audit table, then a drilldown for every endpoint: launched-from screens, callers, what changes between calls and every call. Paste it wherever you are writing this up.' : 'A table to paste wherever you are writing this up.', keepOpen: true, run: async () => { await copyText(await mdText()); return 'Copied!'; } };
+  const mdFile = { id: 'md-file', title: 'Markdown file', tag: '.md', verb: 'Download Markdown', desc: ph ? 'The same audit and drilldown, saved as a file you can attach to a PR or a ticket.' : 'The same table, saved as a file you can attach to a PR or a ticket.', run: async () => save(await mdText(), `foxy-${slug}-${ph ? 'audit' : 'endpoints'}-${stamp}.md`, 'text/markdown;charset=utf-8') };
   if (!ph) return [json, csvReq, csvEp, md, mdFile];
-  const agent = { id: 'agent', title: 'JSON for an agent', tag: '.json', verb: 'Download JSON', desc: 'Verdicts, reasons and call sites, with instructions an AI agent can act on. Agents can also read it themselves (audit_get).', run: async () => { await flushAudits().catch(() => {}); await downloadFromServer('/api/audit/export?phase=' + encodeURIComponent(ph.id), `foxy-audit-${slug}.json`); return 'Saved'; } };
+  const agent = { id: 'agent', title: 'JSON for an agent', tag: '.json', verb: 'Download JSON', desc: 'Verdicts and reasons, plus each endpoint\'s drilldown (launched-from screens, every call, callers, what changes), with instructions an AI agent can act on. Agents can also read it themselves (audit_get).', run: async () => { await flushAudits().catch(() => {}); await downloadFromServer('/api/audit/export?phase=' + encodeURIComponent(ph.id), `foxy-audit-${slug}.json`); return 'Saved'; } };
   return [json, csvReq, csvEp, md, mdFile, agent];
 }
 /** Builds the option list. Only openExport calls it: picking an option never rebuilds the list, which is what made the dialog flicker. */

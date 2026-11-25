@@ -24,6 +24,9 @@ import {
   auditKey,
   auditSummary,
   buildAuditDocument,
+  auditToMarkdown,
+  endpointDrilldown,
+  describeView,
   exportCapture,
   exportPhase,
   listPhases,
@@ -411,7 +414,7 @@ test('buildAuditDocument lists every endpoint with its verdict, reason and call 
   assert.deepEqual(a.statuses, { 200: 1, 500: 1 });
   assert.equal(a.avgMs, 200);
   assert.deepEqual(a.codeOwners, ['@MetaMask/wallet']);
-  assert.deepEqual(a.callSites, [{ function: 'load', file: 'app/a.ts', line: 3, kind: 'app', package: null, calls: 2 }]);
+  assert.deepEqual(a.callSites, [{ function: 'load', file: 'app/a.ts', line: 3, kind: 'app', package: null, calls: 2, codeOwners: ['@MetaMask/wallet'], ownersViaCaller: [] }]);
   assert.deepEqual(a.requestIds, [1, 2]);
   assert.equal(b.verdict, null); // an unknown verdict reads as not judged
   assert.deepEqual(b.ownersViaCaller, ['@MetaMask/core']); // owned only through whoever started it
@@ -558,4 +561,70 @@ test('the audit document carries the export environment, call times, and caller 
   assert.deepEqual(e.ownersViaCaller, ['@MetaMask/metamask-assets']);
   assert.equal(new Date(e.firstCallAt).getTime(), Date.UTC(2026, 10, 25, 20, 0, 0));
   assert.equal(new Date(e.lastCallAt).getTime(), Date.UTC(2026, 10, 25, 20, 0, 5));
+});
+
+// ---- the audit drilldown: what the Endpoints view shows when you open an endpoint, in the export ----------------------------------
+const drillRecord = (id, relMs, { query, view, status = 200, durationMs = 100, sizeBytes = 1000 } = {}) => ({
+  id, key: `k${id}`, method: 'GET', host: 'api.io', path: '/v3/assets', query, url: `https://api.io/v3/assets${query ? `?${query}` : ''}`,
+  relMs, ts: Date.UTC(2026, 10, 25, 20, 0, 0) + relMs, status, durationMs, sizeBytes, view,
+  codeOwners: ['@MetaMask/core-platform'], ownerCodeOwners: ['@MetaMask/metamask-assets', '@MetaMask/core-platform'],
+  callSiteInfo: { method: 'successfulFetch', file: '@metamask/controller-utils/dist/util.js', line: 329, kind: 'controller', pkg: 'controller-utils' },
+  ownerInfo: { method: 'usePopularTokens', file: 'app/hooks/usePopularTokens.ts', line: 146, kind: 'app' },
+});
+const screen = { ready: true, route: 'RampAmountInput', path: ['Root', 'Ramp', 'RampAmountInput'], screenAgeMs: 120, appState: 'active', params: ['x'] };
+
+test('describeView names the screen, the navigators above it, and whether the call fired as the screen mounted', () => {
+  assert.equal(describeView(null), null);
+  assert.deepEqual(describeView(screen), { screen: 'RampAmountInput', navigators: ['Root', 'Ramp'], onMount: true, screenAgeMs: 120, appState: 'active', params: ['x'] });
+  assert.equal(describeView({ ready: false }).screen, 'App start-up');
+  assert.equal(describeView({ ...screen, screenAgeMs: 9000 }).onMount, false);
+});
+
+test('endpointDrilldown reports timing, repeats, screens, changing parameters and every call', () => {
+  const d = endpointDrilldown([
+    drillRecord(3, 9000, { query: 'a=1&b=2', status: 404, durationMs: 300 }),
+    drillRecord(1, 1000, { query: 'a=1&b=2', view: screen }),
+    drillRecord(2, 1010, { query: 'a=2&b=2', view: screen, durationMs: 200 }),
+  ]);
+  assert.deepEqual(d.latency, { avgMs: 200, p95Ms: 300, maxMs: 300 });
+  assert.equal(d.burst, 2);
+  assert.equal(d.failed, 1);
+  assert.equal(d.bytesTotal, 3000);
+  assert.deepEqual(d.redundant, { ms: 300, bytes: 1000 }); // call 3 repeats call 1 exactly
+  assert.deepEqual(d.launchedFrom.map((v) => [v.screen, v.calls, v.onMount]), [['RampAmountInput', 2, 2], ['(not reported)', 1, 0]]);
+  assert.deepEqual(d.changesBetweenCalls.map((c) => [c.param, c.distinctValues]), [['a', 2]]);
+  assert.deepEqual(d.sameInEveryCall, [{ param: 'b', value: '2' }]);
+  assert.deepEqual(d.callDetails.map((c) => [c.id, c.afterPreviousMs, c.identicalToId]), [[1, null, null], [2, 10, null], [3, 7990, 1]]);
+  assert.equal(d.callDetails[1].launchedFrom.screen, 'RampAmountInput');
+  assert.equal(d.callDetails[0].startedFrom.function, 'usePopularTokens');
+  assert.deepEqual(d.callDetails[0].ownersViaCaller, ['@MetaMask/metamask-assets']);
+});
+
+test('endpointDrilldown caps the call list and says how many it left out', () => {
+  const many = Array.from({ length: 5 }, (_, i) => drillRecord(i + 1, i * 100, {}));
+  const d = endpointDrilldown(many, { maxCalls: 3 });
+  assert.equal(d.callDetails.length, 3);
+  assert.equal(d.callDetailsOmitted, 2);
+});
+
+test('the audit document and its markdown carry the drilldown', () => {
+  const recs = [drillRecord(1, 1000, { query: 'a=1', view: screen }), drillRecord(2, 1010, { query: 'a=2', view: screen })];
+  const doc = buildAuditDocument({ phase: { label: 'Wallet ready', startMs: 0, endMs: null, open: true, requests: 2 }, records: recs, verdicts: { 'GET api.io/v3/assets': { v: 'defer', note: 'only on swap' } }, exportedAt: 'T' });
+  assert.equal(doc.version, 2);
+  const [e] = doc.endpoints;
+  assert.equal(e.calls, 2); // the count stays a number; the list is callDetails
+  assert.equal(e.callDetails.length, 2);
+  assert.equal(e.lastCallMs, 1010);
+  assert.deepEqual(e.callSites[0].codeOwners, ['@MetaMask/core-platform']);
+  assert.match(doc.instructions, /launchedFrom/);
+  const md = auditToMarkdown(doc, { header: '> from Foxy\n\n' });
+  assert.match(md, /^> from Foxy\n\n## Audit: Wallet ready/);
+  assert.match(md, /\| Endpoint \| Verdict \| Reason \| Calls \| Identical dupes \| Statuses \| Avg ms \| Launched from \|/);
+  assert.match(md, /RampAmountInput ×2 \(on mount\)/);
+  assert.match(md, /## Drilldown/);
+  assert.match(md, /### GET api\.io\/v3\/assets/);
+  assert.match(md, /\*\*Verdict:\*\* Defer\. only on swap/);
+  assert.match(md, /\*\*Changes between calls:\*\* a \(2 values: 1, 2\)/);
+  assert.match(md, /\| 2 \| .* \| 1\.01 \| same time \| 200 \| 100 ms \| 1000 B \| RampAmountInput \(on mount\) \|/);
+  assert.match(md, /core-platform, metamask-assets \(via\)/);
 });

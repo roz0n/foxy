@@ -22,6 +22,7 @@ import {
   auditKey,
   auditSummary,
   buildAuditDocument,
+  auditToMarkdown,
   exportCapture,
   exportPhase,
   listPhases,
@@ -614,6 +615,13 @@ const httpServer = createServer(async (req, res) => {
       if (found.error) { json(res, { error: found.error }, 404); return; }
       const inPhase = exportPhase(sessionRecords, sessionMarks, found.phase.id);
       const doc = buildAuditDocument({ phase: inPhase.phase, records: inPhase.records, verdicts: audits[auditKey(found.phase)], environment: exportEnvironment(sid) });
+      if (url.searchParams.get('format') === 'md') {
+        // the same audit as markdown for pasting or saving: the table, then the drilldown of every endpoint
+        const header = factsMarkdown(exportEnvironment(sid), { scope: `Phase "${doc.phase.label}"`, shown: inPhase.records.length, total: inPhase.records.length });
+        res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' });
+        res.end(auditToMarkdown(doc, { header }));
+        return;
+      }
       res.writeHead(200, {
         'content-type': 'application/json; charset=utf-8',
         'content-disposition': `attachment; filename="foxy-audit-${fileSlug(found.phase.label)}.json"`,

@@ -65,6 +65,13 @@ function lane(g, big) {
   return `<div class="lane ${big ? 'big' : ''}">${wfMarkers}${ticks}</div>`;
 }
 
+/** The screens an endpoint was launched from, as text for exports: `RampAmountInput ×3, App start-up`. */
+const viewName = (r) => (r.view ? (r.view.ready ? r.view.route : 'App start-up') : '(not reported)');
+function screensOf(g) {
+  const m = new Map();
+  for (const r of g.list) m.set(viewName(r), (m.get(viewName(r)) || 0) + 1);
+  return [...m].sort((x, y) => y[1] - x[1]).map(([name, n]) => (n > 1 ? `${name} \u00d7${n}` : name)).join(', ');
+}
 function buildGroups(list) {
   const groups = new Map();
   for (const r of list) {

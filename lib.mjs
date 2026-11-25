@@ -442,6 +442,81 @@ export const VERDICTS = [
 /** Where a phase's verdicts are kept. A marker's phase is keyed by its label, so the same flow keeps its verdicts across captures. */
 export const auditKey = (phase) => (phase.marker ? `phase:${phase.label}` : phase.id);
 
+/** The launched-from data of one request: the screen the app was showing, the navigators above it, and how fresh the screen was. */
+export function describeView(v) {
+  if (!v) return null;
+  const ready = Boolean(v.ready);
+  return {
+    screen: ready ? v.route : 'App start-up',
+    navigators: ready ? (v.path || []).slice(0, -1) : [],
+    onMount: v.screenAgeMs != null && v.screenAgeMs < 500, // made right as the screen appeared: most likely triggered by mounting it
+    screenAgeMs: v.screenAgeMs ?? null,
+    appState: v.appState ?? null,
+    params: v.params || [],
+  };
+}
+
+const percentile = (values, p) => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)];
+};
+const siteOf = (info) => (info ? { function: info.method, file: info.file, line: info.line, kind: info.kind, package: info.pkg || null } : null);
+
+/**
+ * Everything the Endpoints view shows when you open one endpoint, as data: latency, bursts, redundant bytes, the screens it was launched
+ * from, what changes between calls, and every call with its timing, call site, owners and screen. `list` is one endpoint's records.
+ * At most `maxCalls` calls are listed (`callDetailsOmitted` says how many were left out).
+ */
+export function endpointDrilldown(list, { maxCalls = 100 } = {}) {
+  const sorted = [...list].sort((a, b) => a.relMs - b.relMs);
+  const durations = sorted.map((r) => r.durationMs).filter((d) => d != null);
+  const firstOfKey = new Map();
+  let failed = 0, bytes = 0, wastedMs = 0, wastedBytes = 0;
+  const calls = sorted.map((r, i) => {
+    const key = dupeKey(r), first = firstOfKey.get(key);
+    if (r.error || r.status >= 400) failed++;
+    bytes += r.sizeBytes || 0;
+    if (first) { wastedMs += r.durationMs || 0; wastedBytes += r.sizeBytes || 0; } else firstOfKey.set(key, r);
+    const startedFrom = r.ownerInfo && (r.ownerInfo.file !== r.callSiteInfo?.file || r.ownerInfo.line !== r.callSiteInfo?.line) ? siteOf(r.ownerInfo) : null;
+    return {
+      id: r.id, startedAt: isoLocal(r.ts), offsetMs: Math.round(r.relMs), afterPreviousMs: i ? Math.round(r.relMs - sorted[i - 1].relMs) : null,
+      status: r.error ? 'error' : r.status ?? 'pending', durationMs: r.durationMs == null ? null : Math.round(r.durationMs), sizeBytes: r.sizeBytes ?? null,
+      identicalToId: first ? first.id : null,
+      callSite: siteOf(r.callSiteInfo), startedFrom,
+      codeOwners: r.codeOwners || [], ownersViaCaller: (r.ownerCodeOwners || []).filter((o) => !(r.codeOwners || []).includes(o)),
+      launchedFrom: describeView(r.view),
+    };
+  });
+  // the most calls inside any one second
+  let burst = sorted.length ? 1 : 0;
+  for (let i = 0, j = 0; i < sorted.length; i++) { while (sorted[i].relMs - sorted[j].relMs > 1000) j++; burst = Math.max(burst, i - j + 1); }
+  // screens the endpoint was launched from
+  const screens = new Map();
+  for (const c of calls) {
+    const v = c.launchedFrom, name = v ? v.screen : '(not reported)';
+    const e = screens.get(name) || { screen: name, navigators: v?.navigators || [], calls: 0, onMount: 0 };
+    e.calls++; if (v?.onMount) e.onMount++;
+    screens.set(name, e);
+  }
+  // query parameters: the ones that differ between calls, and the ones that never do
+  const params = new Map();
+  for (const r of sorted) for (const [k, v] of new URLSearchParams(r.query || '')) { const m = params.get(k) || new Map(); m.set(v, (m.get(v) || 0) + 1); params.set(k, m); }
+  const changes = [], same = [];
+  for (const [name, values] of params) {
+    if (values.size > 1) changes.push({ param: name, distinctValues: values.size, values: [...values].slice(0, 8).map(([value, n]) => ({ value, calls: n })) });
+    else same.push({ param: name, value: [...values.keys()][0] });
+  }
+  changes.sort((a, b) => b.distinctValues - a.distinctValues);
+  return {
+    latency: { avgMs: durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null, p95Ms: percentile(durations, 0.95) == null ? null : Math.round(percentile(durations, 0.95)), maxMs: durations.length ? Math.round(Math.max(...durations)) : null },
+    burst, failed, bytesTotal: bytes, redundant: { ms: Math.round(wastedMs), bytes: wastedBytes },
+    launchedFrom: [...screens.values()].sort((a, b) => b.calls - a.calls),
+    changesBetweenCalls: changes, sameInEveryCall: same,
+    callDetails: calls.slice(0, maxCalls), callDetailsOmitted: Math.max(0, calls.length - maxCalls),
+  };
+}
+
 /**
  * The audit of one phase as a document an agent can act on: what the verdicts mean, then every endpoint the phase called with its verdict,
  * reason and the code that makes the call. `phase` and `records` are what exportPhase returns; `verdicts` is `{ [endpoint]: { v, note } }`
@@ -469,7 +544,8 @@ export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt =
       (r.ownerCodeOwners || []).forEach((o) => via.add(o));
       if (r.callSiteInfo) {
         const info = r.callSiteInfo, id = `${info.method}|${info.file}|${info.line}`;
-        sites.set(id, { info, calls: (sites.get(id)?.calls || 0) + 1 });
+        const old = sites.get(id);
+        sites.set(id, { info, calls: (old?.calls || 0) + 1, owners: old?.owners ?? (r.codeOwners || []), via: old?.via ?? (r.ownerCodeOwners || []).filter((o) => !(r.codeOwners || []).includes(o)) });
       }
     }
     const v = verdicts[g.endpoint] || {};
@@ -479,24 +555,79 @@ export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt =
       calls: g.list.length, identicalDupes: dupes, statuses,
       avgMs: durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
       firstCallMs: Math.round(g.list[0].relMs),
+      lastCallMs: Math.round(g.list[g.list.length - 1].relMs),
       firstCallAt: isoLocal(g.list[0].ts), lastCallAt: isoLocal(g.list[g.list.length - 1].ts),
       codeOwners: [...teams], ownersViaCaller: [...via].filter((o) => !teams.has(o)),
-      callSites: [...sites.values()].sort((a, b) => b.calls - a.calls).map(({ info, calls }) => ({ function: info.method, file: info.file, line: info.line, kind: info.kind, package: info.pkg || null, calls })),
+      callSites: [...sites.values()].sort((a, b) => b.calls - a.calls).map(({ info, calls, owners, via }) => ({ function: info.method, file: info.file, line: info.line, kind: info.kind, package: info.pkg || null, calls, codeOwners: owners, ownersViaCaller: via })),
       requestIds: g.list.map((r) => r.id),
+      ...endpointDrilldown(g.list),
     };
   }).sort((a, b) => a.firstCallMs - b.firstCallMs);
   const count = (id) => endpoints.filter((e) => e.verdict === id).length;
   const unjudged = endpoints.filter((e) => !e.verdict).length;
   return {
-    foxy: 'audit', version: 1, exportedAt,
+    foxy: 'audit', version: 2, exportedAt,
     exportedBy: environment ? { ...environment } : undefined,
     instructions: 'A human audited the network requests the MetaMask Mobile app makes during one phase of its run. Each endpoint carries the verdict they gave it for THIS phase only: '
       + VERDICTS.map((x) => `"${x.id}" = ${x.tip}`).join('; ')
-      + '. A null verdict means it has not been judged yet, so assume nothing about it. For "defer", "move" and "drop" endpoints, use callSites (function, file, line) to find the code that makes the request and propose the change, quoting the reason. Leave "keep" endpoints alone. Owners: codeOwners are the teams that own the file that makes the request; ownersViaCaller are teams that own the caller behind it (the code that started the request by going through someone else\'s), so a change to the trigger may belong to them.',
+      + '. A null verdict means it has not been judged yet, so assume nothing about it. For "defer", "move" and "drop" endpoints, use callSites (function, file, line) to find the code that makes the request and propose the change, quoting the reason. Leave "keep" endpoints alone. Owners: codeOwners are the teams that own the file that makes the request; ownersViaCaller are teams that own the caller behind it (the code that started the request by going through someone else\'s), so a change to the trigger may belong to them. Each endpoint also carries its drilldown: launchedFrom (the screens the requests were made from, and how many fired as the screen mounted, which usually means the screen\'s own mount code triggers them), latency, burst (most calls within one second), redundant (time and bytes spent on identical repeats), changesBetweenCalls and sameInEveryCall (the query parameters), and callDetails (every call with its timing, status, call site, owners and screen; identicalToId names the earlier call it repeats).',
     phase: { label: phase.label, startMs: Math.round(phase.startMs), endMs: phase.endMs == null ? null : Math.round(phase.endMs), open: phase.open, requests: phase.requests },
     summary: { endpoints: endpoints.length, judged: endpoints.length - unjudged, keep: count('keep'), defer: count('defer'), move: count('move'), drop: count('drop'), unjudged },
     endpoints,
   };
+}
+
+const mdEsc = (x) => String(x ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
+const shortTeam = (o) => String(o).replace(/^@?MetaMask\//i, '');
+const secText = (ms) => (ms / 1000).toFixed(2);
+const bytesText = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const siteText = (s) => (s ? `${s.function}() ${s.file}:${s.line}` : '');
+const ownersOf = (codeOwners, via) => [...(codeOwners || []).map(shortTeam), ...(via || []).map((o) => `${shortTeam(o)} (via)`)].join(', ');
+const screensText = (views) => (views || []).map((v) => `${v.screen}${v.calls > 1 ? ` ×${v.calls}` : ''}${v.onMount ? ` (${v.onMount === v.calls ? 'on mount' : `${v.onMount} on mount`})` : ''}`).join(', ');
+
+/**
+ * The audit document as markdown: the table of endpoints with their verdicts, then a drilldown for each endpoint (the same things the
+ * Endpoints view shows when you open one) so the write-up stands on its own. `header` goes first (the "exported from Foxy" block).
+ */
+export function auditToMarkdown(doc, { header = '' } = {}) {
+  const { phase, summary, endpoints } = doc;
+  const window = `+${secText(phase.startMs)}s to ${phase.endMs == null ? 'now (still collecting)' : `+${secText(phase.endMs)}s`}`;
+  const verdictLabel = (e) => VERDICTS.find((x) => x.id === e.verdict)?.label || 'No verdict';
+  const out = [
+    `${header}## Audit: ${phase.label}`, '',
+    `Phase window ${window}. ${phase.requests} request${phase.requests === 1 ? '' : 's'} to ${endpoints.length} endpoint${endpoints.length === 1 ? '' : 's'}.`, '',
+    `Keep ${summary.keep} · Defer ${summary.defer} · Move ${summary.move} · Drop ${summary.drop} · No verdict ${summary.unjudged}`, '',
+    '| Endpoint | Verdict | Reason | Calls | Identical dupes | Statuses | Avg ms | Launched from | Code owner | Call site | First call (+s) | First call at |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|',
+    ...endpoints.map((e) => `| ${mdEsc(e.endpoint)} | ${mdEsc(verdictLabel(e))} | ${mdEsc(e.reason || '')} | ${e.calls} | ${e.identicalDupes} | ${mdEsc(Object.entries(e.statuses).map(([st, n]) => `${st}×${n}`).join(' '))} | ${e.avgMs ?? ''} | ${mdEsc(screensText(e.launchedFrom))} | ${mdEsc(ownersOf(e.codeOwners, e.ownersViaCaller))} | ${mdEsc(siteText(e.callSites[0]))} | ${secText(e.firstCallMs)} | ${mdEsc(e.firstCallAt)} |`),
+    '', '## Drilldown', '',
+    'One section per endpoint, in the order of the table: how it behaves, where it was launched from, who calls it, what changes between calls, and every call.', '',
+  ];
+  for (const e of endpoints) {
+    out.push(`### ${e.endpoint}`, '');
+    out.push(`**Verdict:** ${verdictLabel(e)}${e.reason ? `. ${e.reason}` : ''}`, '');
+    const lat = e.latency;
+    out.push(
+      `- **Calls:** ${e.calls}${e.identicalDupes ? ` (${e.identicalDupes} identical repeat${e.identicalDupes === 1 ? '' : 's'}: ${e.redundant.ms} ms and ${bytesText(e.redundant.bytes) || '0 B'} redundant)` : ' (no identical repeats)'}`,
+      `- **Latency:** ${lat.avgMs == null ? 'no responses' : `avg ${lat.avgMs} ms · p95 ${lat.p95Ms} ms · max ${lat.maxMs} ms`}`,
+      `- **Burst:** ${e.burst}× within one second`,
+      `- **First to last:** ${e.calls > 1 ? `${e.firstCallAt} to ${e.lastCallAt} (+${secText(e.firstCallMs)}s to +${secText(e.lastCallMs)}s, a span of ${secText(e.lastCallMs - e.firstCallMs)}s)` : `${e.firstCallAt} (+${secText(e.firstCallMs)}s), a single call`}`,
+      `- **Payload:** ${bytesText(e.bytesTotal) || '0 B'} in total, ${e.failed} failed`,
+    );
+    out.push(`- **Launched from:** ${e.launchedFrom.length ? e.launchedFrom.map((v) => `${v.screen}${v.navigators.length ? ` (in ${v.navigators.slice(-2).join(' › ')})` : ''}: ${v.calls} call${v.calls === 1 ? '' : 's'}${v.onMount ? `, ${v.onMount} fired as the screen mounted` : ''}`).join('; ') : 'not reported by this app build'}`);
+    out.push(`- **Who calls it:** ${e.callSites.length ? e.callSites.map((c) => `${c.function}() ${c.file}:${c.line} ×${c.calls}${ownersOf(c.codeOwners, c.ownersViaCaller) ? ` (${ownersOf(c.codeOwners, c.ownersViaCaller)})` : ''}`).join('; ') : 'no stack captured'}`);
+    if (e.changesBetweenCalls.length) out.push(`- **Changes between calls:** ${e.changesBetweenCalls.map((c) => `${c.param} (${c.distinctValues} values: ${c.values.map((v) => `${v.value}${v.calls > 1 ? ` ×${v.calls}` : ''}`).join(', ')}${c.distinctValues > c.values.length ? ', …' : ''})`).join('; ')}`);
+    else out.push(`- **Changes between calls:** ${e.sameInEveryCall.length ? 'nothing, every call asks for the same thing' : 'no query parameters'}`);
+    if (e.sameInEveryCall.length) out.push(`- **Same in every call:** ${e.sameInEveryCall.slice(0, 8).map((c) => `${c.param}=${c.value}`).join(', ')}${e.sameInEveryCall.length > 8 ? ', …' : ''}`);
+    out.push('', '| # | Started at | +s | After previous | Status | Time | Size | Launched from | Call site | Owner | Note |', '|---|---|---|---|---|---|---|---|---|---|---|');
+    for (const c of e.callDetails) {
+      const after = c.afterPreviousMs == null ? 'first' : c.afterPreviousMs < 50 ? 'same time' : `+${secText(c.afterPreviousMs)}s`;
+      out.push(`| ${c.id} | ${mdEsc(c.startedAt)} | ${secText(c.offsetMs)} | ${after} | ${c.status} | ${c.durationMs == null ? '' : `${c.durationMs} ms`} | ${bytesText(c.sizeBytes)} | ${mdEsc(c.launchedFrom ? `${c.launchedFrom.screen}${c.launchedFrom.onMount ? ' (on mount)' : ''}` : '')} | ${mdEsc(siteText(c.callSite))}${c.startedFrom ? mdEsc(` ↳ ${siteText(c.startedFrom)}`) : ''} | ${mdEsc(ownersOf(c.codeOwners, c.ownersViaCaller))} | ${c.identicalToId ? `same as #${c.identicalToId}` : ''} |`);
+    }
+    if (e.callDetailsOmitted) out.push('', `_${e.callDetailsOmitted} more call${e.callDetailsOmitted === 1 ? '' : 's'} not listed (the first ${e.callDetails.length} are shown). The JSON, full detail export has every one._`);
+    out.push('');
+  }
+  return `${out.join('\n')}\n`;
 }
 
 /** Counts of the verdicts given to a phase's endpoints, for a quick look (marker_list). */

@@ -383,6 +383,12 @@ tr.ep { cursor: pointer; } tr.ep:hover td, tr.ep.open td { background: var(--col
 .lane.big .tick { top: 6px; width: 4px; height: 26px; }
 .tick.ok { background: var(--color-success-default); } .tick.bad { background: var(--color-error-default); } .tick.wait { background: var(--color-warning-default); }
 .tick.dup { box-shadow: 0 0 0 1.5px var(--brand-colors-orange-orange300); }
+/* The full endpoint, first thing in an opened Endpoints row, big enough to read at a glance */
+.ep-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.ep-head .meth { height: 26px; padding: 0 9px; font-size: 13px; line-height: 26px; }
+.ep-url { min-width: 0; flex: 1; font-family: var(--font-family-mono); font-size: 17px; line-height: 26px; color: var(--color-text-default); overflow-wrap: anywhere; }
+.ep-url b { font-weight: 700; }
+.ep-head .cp.lab { flex: none; margin-top: 1px; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .card { background: var(--color-background-alternative); border: 1px solid var(--color-border-muted); border-radius: var(--r-box); padding: 10px 14px; min-width: 0; }
 .card .cl { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); font-weight: 600; }

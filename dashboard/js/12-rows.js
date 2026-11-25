@@ -135,7 +135,10 @@ function renderEndpointDetail(g, cols) {
       <span>${badge}</span></div>`;
   }).reverse().join(''); // newest first, like the Timeline
   const callers = [...g.sites.values()].sort((a, b) => b.n - a.n).map((e) => `<div class="caller">${fnCell(e.info, false, { copy: true })}<span class="badge">×${e.n}</span><div class="chips">${ownerChips(e.info, e.owners, e.via, 2)}</div></div>`).join('') || '<div class="hint">No stack captured.</div>';
+  const full = (g.list[0].url || `https://${g.host}${g.path}`).split(/[?#]/)[0]; // the endpoint without its query: the same for every call
+  const head = `<div class="ep-head"><span class="meth">${esc(g.method)}</span><span class="ep-url"><b>${esc(g.host)}</b>${esc(g.path)}</span>${cp(full, 'Copy the endpoint URL (without the query)', { label: 'Copy Endpoint', right: true })}</div>`;
   return `<tr class="detail${enterKey === g.k ? ' enter' : ''}" data-k="${esc(g.k)}"><td colspan="${cols}">
+    ${head}
     <div class="cards">${cards}</div>
     <div class="egrid">
       <section class="panel"><h3>Every Call<span class="n" style="margin-left:8px">${g.n}</span>${cp(g.list.map((r) => `#${r.id}\t+${sec(r.relMs)}s\t${clock(r.ts)}\t${r.error ? 'error' : r.status ?? ''}\t${r.durationMs ?? ''}ms\t${r.url}`).join('\n'), 'Copy call list', { right: true, label: 'Copy Calls' })}</h3>
@@ -167,9 +170,6 @@ function renderEndpoints() {
     : [{ id: 'empty', kind: 'note', est: 44, hk: 'empty', html: () => `<tr><td colspan="${cols}" class="empty">${reqs.size ? 'No endpoints match these filters.' : 'Waiting for requests…'}</td></tr>` }], cols);
 }
 
-/** Every endpoint one phase called (not just what the filters show), in first-call order: the audit covers the whole phase. */
-const auditGroups = (ph) => buildGroups([...reqs.values()].filter((r) => phaseByKey.get(r.key)?.id === ph.id)).sort((a, b) => a.first - b.first);
-const mdCell = (x) => String(x ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
 const siteText = (info) => (info ? `${info.method}() ${info.file}:${info.line}` : '');
 const slugOf = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'phase';
 function downloadText(text, name, type) {
@@ -178,32 +178,17 @@ function downloadText(text, name, type) {
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(href), 10000);
 }
-const verdictCounts = (ph, groups) => {
-  const n = { keep: 0, defer: 0, move: 0, drop: 0, none: 0 };
-  for (const g of groups) n[auditOf(ph, g.k).v || 'none']++;
-  return n;
-};
-/** The audit as a markdown table: one row per endpoint the phase called, judged or not. */
-function auditMarkdown(ph) {
-  const groups = auditGroups(ph), n = verdictCounts(ph, groups);
-  const when = `+${sec(ph.start)}s to ${ph.end === Infinity ? 'now (still collecting)' : `+${sec(ph.end)}s`}`;
-  const rows = groups.map((g) => {
-    const v = auditOf(ph, g.k), site = [...g.sites.values()][0]?.info;
-    return `| ${mdCell(g.k)} | ${mdCell(VERDICTS.find((x) => x.id === v.v)?.label || 'No verdict')} | ${mdCell(v.note || '')} | ${g.n} | ${g.dupes} | ${mdCell(Object.entries(g.st).map(([s2, c]) => `${s2}×${c}`).join(' '))} | ${g.avg ?? ''} | ${mdCell(g.ownerText)} | ${mdCell(siteText(site))} | ${sec(g.first)} | ${clock(g.firstAt)} |`;
-  });
-  return `## Audit: ${ph.label}\n\nPhase window ${when}. ${ph.n} request${ph.n === 1 ? '' : 's'} to ${groups.length} endpoint${groups.length === 1 ? '' : 's'}.\n\nKeep ${n.keep} · Defer ${n.defer} · Move ${n.move} · Drop ${n.drop} · No verdict ${n.none}\n\n| Endpoint | Verdict | Reason | Calls | Identical dupes | Statuses | Avg ms | Code owner | Call site | First call (+s) | First call at |\n|---|---|---|---|---|---|---|---|---|---|---|\n${rows.join('\n')}\n`;
-}
 /** Client-side markdown for the Endpoints tab, including verdicts and notes. */
 function endpointsMarkdown(list = [...reqs.values()].filter(match)) {
   const c = (x) => String(x ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
   const groups = buildGroups(list).sort((a, b) => a.first - b.first);
-  const head = '| First +s | First call at | Phase | Endpoint | Code owner | Calls | Identical dupes | Statuses | Avg ms | Call site | Verdict | Notes |\n|---|---|---|---|---|---|---|---|---|---|---|---|';
+  const head = '| First +s | First call at | Phase | Endpoint | Launched from | Code owner | Calls | Identical dupes | Statuses | Avg ms | Call site | Verdict | Notes |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|';
   const phaseTable = phases.length
     ? `Phases (each marker starts a phase that lasts until the next one):\n\n| Phase | Starts (+s) | Requests | New endpoints | Identical dupes | Failed |\n|---|---|---|---|---|---|\n${phases.map((p) => `| ${c(p.label)} | ${sec(p.start)} | ${p.n} | ${p.newEps} | ${p.dupes} | ${p.failed} |`).join('\n')}\n\n`
     : '';
   const rows = groups.map((g) => {
     const site = [...g.sites.values()][0]?.info, v = auditOf(phaseOfGroup(g), g.k);
-    return `| ${sec(g.first)} | ${clock(g.firstAt)} | ${c(phaseByKey.get(g.list[0].key)?.label || '')} | ${c(g.k)} | ${c(g.ownerText)} | ${g.n} | ${g.dupes} | ${c(Object.entries(g.st).map(([s, n]) => `${s}×${n}`).join(' '))} | ${g.avg ?? ''} | ${site ? c(`${site.method}() ${site.file}:${site.line}`) : ''} | ${c(VERDICTS.find((x) => x.id === v.v)?.label || '')} | ${c(v.note || '')} |`;
+    return `| ${sec(g.first)} | ${clock(g.firstAt)} | ${c(phaseByKey.get(g.list[0].key)?.label || '')} | ${c(g.k)} | ${c(screensOf(g))} | ${c(g.ownerText)} | ${g.n} | ${g.dupes} | ${c(Object.entries(g.st).map(([s, n]) => `${s}×${n}`).join(' '))} | ${g.avg ?? ''} | ${site ? c(`${site.method}() ${site.file}:${site.line}`) : ''} | ${c(VERDICTS.find((x) => x.id === v.v)?.label || '')} | ${c(v.note || '')} |`;
   });
   return `${phaseTable}${head}\n${rows.join('\n')}\n`;
 }

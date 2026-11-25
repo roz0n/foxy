@@ -14,7 +14,7 @@ const HELP = [
     ${step(1, 'Run the App Against Foxy', '<p>Open Foxy and choose your MetaMask Mobile folder (it sets <code>FOXY="true"</code> in <code>.js.env</code>), restart Metro and launch the app. Requests stream in live.</p>')}
     ${step(2, 'Label What You Are Doing', `<p>Drop <b>markers</b> as you use the app (${kb('M')}). They split the capture into phases such as <i>Onboarding visible</i> and <i>Wallet ready</i>.</p><p>${goto('markers', '🚩 How Markers Work')}</p>`)}
     ${step(3, 'Find the Waste', `<p>Look for identical duplicates, failures, third-party chatter and anything requested before it is needed. The <b>Endpoints</b> view (${kb('2')}) groups calls by URL so repeats are obvious. ${kb('1')} brings you back to the Timeline.</p><p>${goto('timeline', '📜 Reading the Timeline')} ${goto('endpoints', '🧭 Endpoints & Verdicts')}</p>`)}
-    ${step(4, 'Decide and Share', '<p>Give each endpoint a verdict (Keep, Defer, Move, Drop) and a reason, then <b>Export</b> the phase as a markdown table to share. Verdicts are per phase: open <b>Endpoints</b>, focus a phase and turn on <b>Audit</b> to see the Verdict column and give verdicts for that phase.</p>')}` },
+    ${step(4, 'Decide and Share', '<p>Give each endpoint a verdict (Keep, Defer, Move, Drop) and a reason, then <b>Export</b> the phase as markdown to share. It includes each endpoint\'s launched-from screens, latency, bursts, what changes between calls and every call. Verdicts are per phase: open <b>Endpoints</b>, focus a phase and turn on <b>Audit</b> to see the Verdict column and give verdicts for that phase.</p>')}` },
 
   { id: 'markers', em: '🚩', title: 'Markers & Phases', html: () => `
     <h2>Markers &amp; Phases</h2>
