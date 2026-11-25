@@ -70,6 +70,19 @@ button { cursor: pointer; } button:hover { background: var(--color-background-ho
 .tabs button.active { background: var(--color-primary-muted); color: var(--color-primary-default); font-weight: 600; }
 .field input { width: 100%; min-width: 0; }
 .field.search { flex: 1 1 260px; min-width: 0; max-width: 440px; }
+/* An applied search is easy to spot: the field is tinted, with the match count and a clear button, all centred on one line. The field's own
+   focus outline is the only border; nothing else is drawn around it. Nothing matching tints it red instead. */
+.field.search.has-filter input { padding-right: 96px; background: color-mix(in srgb, var(--color-primary-default) 16%, transparent); color: var(--color-primary-default); font-weight: 600; }
+.field.search.has-filter .ic { color: var(--color-primary-default); }
+.field.search.has-filter input::placeholder { color: color-mix(in srgb, var(--color-primary-default) 60%, transparent); }
+.field.search .fcount { position: absolute; top: 50%; right: 40px; transform: translateY(-50%); font: 600 11.5px/1 var(--font-family-mono); color: var(--color-primary-default); pointer-events: none; white-space: nowrap; }
+.field.search.no-match input, .field.search.no-match .ic, .field.search.no-match .fcount { color: var(--color-error-default); }
+.field.search.no-match input { background: color-mix(in srgb, var(--color-error-default) 16%, transparent); }
+.field.search:focus-within .fcount { right: 12px; } /* the / hint steps aside while typing, so the count moves over */
+.field.search.no-match input::placeholder { color: color-mix(in srgb, var(--color-error-default) 60%, transparent); }
+/* The "no requests match" row: the text and the button share one centred line */
+.empty-row { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.empty-row .btn { margin: 0; }
 .field.marker { width: 220px; }
 .spacer { flex: 1; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--r-box); background: var(--color-background-section); border: 1px solid var(--color-border-muted); color: var(--color-text-alternative); font-size: 12px; }
@@ -184,9 +197,9 @@ tr.detail > td { background: var(--color-background-section); white-space: norma
 .meth { flex: none; height: 20px; padding: 0 7px; border-radius: var(--r-ctl); background: var(--color-primary-muted); color: var(--color-primary-default); font: 700 11.5px/20px var(--font-family-mono); letter-spacing: .02em; }
 .url { min-width: 0; font-family: var(--font-family-mono); font-size: 12.5px; line-height: 20px; color: var(--color-text-alternative); overflow-wrap: anywhere; }
 .url b { color: var(--color-text-default); font-weight: 600; }
-.ov-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 12px 16px; margin: 14px 0 0; }
+.ov-meta { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 14px 0 0; }
 .ov-meta dt { font-size: 11.5px; line-height: 16px; color: var(--color-text-muted); }
-.ov-meta dd { display: flex; align-items: center; min-height: 22px; margin: 2px 0 0; font-size: 13px; font-weight: 500; color: var(--color-text-default); font-variant-numeric: tabular-nums; }
+.ov-meta dd { display: flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 22px; margin: 2px 0 0; font-size: 13px; font-weight: 500; color: var(--color-text-default); font-variant-numeric: tabular-nums; }
 .ov-meta dd .na { color: var(--color-text-muted); font-weight: 400; }
 .io-sec { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border-muted); }
 .io-sec > h4 { margin: 0 0 4px; font-size: 13px; line-height: 20px; font-weight: 600; letter-spacing: -.005em; color: var(--color-text-default); }
@@ -934,26 +947,35 @@ html[data-theme="light"] .fpop .fopt .fstar[aria-pressed="true"] { color: color-
 .fmsrow .mini button { height: 24px; line-height: 24px; }
 
 /* request detail: which screen the request was made from */
-.vstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 14px; padding: 10px 14px; border-radius: var(--r-box); background: var(--surface-1, var(--color-background-alternative)); }
+.vstrip { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; padding: 12px 16px; border-radius: 14px; background: var(--surface-1, var(--color-background-alternative)); }
 html[data-theme="light"] .vstrip { background: #ffffff; }
-.vstrip > .ic { width: 18px; height: 18px; color: var(--color-primary-default); }
-.vstrip .vk { font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
-.vstrip .vname { font: 600 14px var(--font-family-mono); color: var(--color-text-default); letter-spacing: 0; }
-.vstrip .vname.boot { font: 600 14px var(--font-family); color: var(--color-warning-default); }
+/* the screen icon sits in a small tile, the way an app icon does */
+.vstrip > .ic { flex: none; box-sizing: content-box; width: 16px; height: 16px; padding: 7px; border-radius: 10px; color: var(--color-primary-default); background: var(--color-primary-muted); }
+.vstrip.none > .ic { color: var(--color-text-muted); background: var(--fill-1); }
+.vbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.vhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-height: 32px; align-content: center; }
+.vk { flex-basis: 100%; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); line-height: 13px; }
+.vstrip.none .vk { flex-basis: auto; }
+.vstrip .vname { font: 600 15px/20px var(--font-family-mono); color: var(--color-text-default); letter-spacing: 0; }
+.vstrip .vname.boot { font: 600 15px/20px var(--font-family); color: var(--color-warning-default); }
 html[data-theme="light"] .vstrip .vname.boot { color: color-mix(in srgb, var(--color-warning-default) 58%, #000); }
-.vstrip .vsub { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; padding-left: 30px; font-size: 12px; color: var(--color-text-alternative); }
-.vstrip.none > .ic { color: var(--color-text-muted); }
-.vstrip.none .vsub { flex-basis: auto; padding-left: 0; }
+/* the facts next to the name are plain text with dots between them, not pills */
+.vmeta { display: inline-flex; flex-wrap: wrap; align-items: baseline; font-size: 12px; color: var(--color-text-alternative); }
+.vm + .vm::before { content: "\00b7"; margin: 0 7px; color: var(--color-text-muted); }
+.vm.fresh { color: var(--color-primary-default); }
+.vm.warn { color: var(--color-warning-default); }
+html[data-theme="light"] .vm.warn { color: color-mix(in srgb, var(--color-warning-default) 58%, #000); }
+.vpath { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 12px; color: var(--color-text-muted); }
+.vpath .here { color: var(--color-text-alternative); font-weight: 600; }
+.vpath .vsep { font-style: normal; opacity: .6; }
+/* where the screen lives in the source, set off by a hairline like the rows of a grouped list */
+.vsrcs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; margin-top: 5px; padding-top: 8px; border-top: 1px solid var(--color-border-muted); font-size: 12px; }
 .vsrc { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-family-mono); font-size: 12px; }
 .vsrc .vsrck { font-family: var(--font-family); color: var(--color-text-muted); }
 .vsrc a.gh { color: var(--color-text-default); text-decoration: none; }
 .vsrc a.gh:hover { color: var(--color-primary-default); text-decoration: underline; }
 .vsrc a.gh .ic { width: 12px; height: 12px; margin-left: 5px; vertical-align: -1px; opacity: .45; transition: opacity .12s; }
 .vsrc a.gh:hover .ic { opacity: 1; }
-.vchip { padding: 2px 10px; border-radius: var(--r-ctl); font-size: 12px; font-weight: 500; color: var(--color-text-alternative); background: var(--fill-1); white-space: nowrap; }
-.vchip.fresh { color: var(--color-primary-default); background: var(--color-primary-muted); }
-.vchip.warn { color: var(--color-warning-default); background: var(--color-warning-muted); }
-html[data-theme="light"] .vchip.warn { color: color-mix(in srgb, var(--color-warning-default) 58%, #000); }
 
 /* ============ depth: the time strip is a recessed well, not more of the page ============ */
 :root {

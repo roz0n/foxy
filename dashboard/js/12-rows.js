@@ -81,7 +81,9 @@ function renderTimeline() {
   } else if (rows.length) {
     for (const r of rows) items.push(reqItem(r));
   } else {
-    items.push(noteItem('empty', reqs.size ? 'No requests match these filters.' : 'Waiting for requests… launch the app with FOXY="true".'));
+    items.push(noteItem('empty', !reqs.size ? 'Waiting for requests… launch the app with FOXY="true".'
+      : filter ? `<span class="empty-row">No requests match “${esc($('#filter').value)}”. <button type="button" class="btn sm" data-clear-search>Clear search</button></span>`
+        : 'No requests match these filters.'));
   }
   timelineV.setItems(items, cols);
   const now = document.querySelectorAll('tr.detail details');

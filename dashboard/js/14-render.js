@@ -94,6 +94,7 @@ function render() {
   all.forEach((r) => dupeCounts.set(reqKey(r), (dupeCounts.get(reqKey(r)) || 0) + 1));
   span = Math.max(1, all.reduce((m, r) => Math.max(m, r.relMs + (r.durationMs || 0)), 0), markers.reduce((m, x) => Math.max(m, x.relMs), 0));
   computePhases(all);
+  syncSearchField(all.filter(match).length, all.length);
   if (ui.phase && !navBooting() && !phases.some((p) => p.id === ui.phase)) ui.phase = null; // its marker was deleted
   if (!ui.phase) ui.audit = false; // auditing needs a phase in focus
   syncEndpointsGrid();

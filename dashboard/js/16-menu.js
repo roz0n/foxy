@@ -123,5 +123,18 @@ $('#timeline').addEventListener('click', (e) => {
 $('#tabTimeline').onclick = () => navigate(() => { tab = 'timeline'; render(); });
 $('#tabEndpoints').onclick = () => navigate(() => { tab = 'endpoints'; render(); });
 $('#filter').oninput = (e) => { filter = e.target.value.toLowerCase(); render(); };
+/** Clears the search box: the Clear search button under an empty result, or Esc while typing. */
+function clearSearch() { $('#filter').value = ''; filter = ''; render(); }
+document.addEventListener('click', (e) => { if (e.target.closest('[data-clear-search]')) clearSearch(); });
+// Clicking anywhere outside the search box lets go of it, so it stops looking selected (the search itself stays applied).
+document.addEventListener('pointerdown', (e) => { const f = $('#filter'); if (document.activeElement === f && !e.target.closest('.field.search')) f.blur(); }, true);
+/** While a search is applied the field says so: a tint and how many requests it keeps. Nothing matching turns it red. */
+function syncSearchField(hits, total) {
+  const field = document.querySelector('.field.search'), on = Boolean(filter);
+  field.classList.toggle('has-filter', on);
+  field.classList.toggle('no-match', on && hits === 0);
+  $('#fcount').hidden = !on;
+  if (on) $('#fcount').textContent = `${hits} of ${total}`;
+}
 $('#clear').onclick = async () => { await fetch('/api/clear', { method: 'POST' }); };
 $('#reset').onclick = () => { timelineGrid.reset(render); endpointsGrid.reset(render); };

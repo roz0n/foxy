@@ -150,25 +150,28 @@ function sourceLink(s) {
 /** Where in the app the request was made: the focused screen, how it got there, and how long it had been showing. */
 function viewStrip(r) {
   const v = r.view;
-  if (!v) return `<div class="vstrip none">${icon('screen')}<span class="vk">Launched from</span><span class="vsub">Not reported. Rebuild and restart the app to record which screen each request comes from.</span></div>`;
-  const chip = (text, cls, tip) => `<span class="vchip ${cls || ''}" title="${esc(tip || '')}">${esc(text)}</span>`;
-  const chips = [];
+  if (!v) return `<div class="vstrip none">${icon('screen')}<div class="vbody"><div class="vhead"><span class="vk">Launched from</span><span class="vmeta"><span class="vm">Not reported. Rebuild and restart the app to record which screen each request comes from.</span></span></div></div></div>`;
+  // quiet facts next to the name; only the ones worth a second look get colour
+  const facts = [];
+  const fact = (text, cls, tip) => facts.push(`<span class="vm ${cls || ''}" title="${esc(tip || '')}">${esc(text)}</span>`);
   if (v.ready && v.screenAgeMs != null) {
     const fresh = v.screenAgeMs < 500;
-    chips.push(chip(fresh ? `fired ${dur(v.screenAgeMs)} after the screen opened` : `on screen for ${dur(v.screenAgeMs)}`, fresh ? 'fresh' : '', fresh ? 'Made right as the screen appeared: most likely triggered by mounting it' : 'How long this screen had been showing when the request was made'));
+    fact(fresh ? `fired ${dur(v.screenAgeMs)} after the screen opened` : `on screen for ${dur(v.screenAgeMs)}`, fresh ? 'fresh' : '', fresh ? 'Made right as the screen appeared: most likely triggered by mounting it' : 'How long this screen had been showing when the request was made');
   }
-  if (v.appState && v.appState !== 'active') chips.push(chip(`app ${v.appState}`, 'warn', 'The app was not in the foreground'));
-  if (v.params?.length) chips.push(chip(`params: ${v.params.join(', ')}`, '', 'Names of the screen params (values are never recorded)'));
+  if (v.appState && v.appState !== 'active') fact(`app ${v.appState}`, 'warn', 'The app was not in the foreground');
+  if (v.params?.length) fact(`${v.params.length} param${v.params.length === 1 ? '' : 's'}: ${v.params.join(', ')}`, '', 'Names of the screen params (values are never recorded)');
   const name = v.ready ? v.route : 'Before navigation was ready';
-  const sub = v.ready ? (v.path.length > 1 ? v.path.join('  ›  ') : '') : 'App start-up: the navigator had not mounted yet, so no screen was showing.';
+  // the navigators above the screen, ending at the screen itself
+  const path = v.ready ? (v.path.length > 1 ? v.path.map((s, i, a) => `<span class="${i === a.length - 1 ? 'here' : ''}">${esc(s)}</span>`).join('<i class="vsep">\u203a</i>') : '') : '<span>App start-up: the navigator had not mounted yet, so no screen was showing.</span>';
   // the screen's source file and line, plus where it is registered in a navigator when that is a different place
   const src = v.ready ? viewSource(v.route) : null, reg = src?.registeredIn;
   const where = src ? [
     `<span class="vsrc"><span class="vsrck">${src.guess ? 'Best match' : src.resolved ? 'Defined in' : 'Registered in'}</span>${sourceLink(src)}</span>`,
     reg && src.resolved && (reg.file !== src.file || reg.line !== src.line) ? `<span class="vsrc"><span class="vsrck">Registered in</span>${sourceLink(reg)}</span>` : '',
   ].join('') : '';
-  const row = sub || where ? `<div class="vsub">${sub ? `<span>${esc(sub)}</span>` : ''}${where}</div>` : '';
-  return `<div class="vstrip">${icon('screen')}<span class="vk">Launched from</span><span class="vname ${v.ready ? '' : 'boot'}">${esc(name)}</span>${chips.join('')}${row}</div>`;
+  return `<div class="vstrip">${icon('screen')}<div class="vbody">
+    <div class="vhead"><span class="vk">Launched from</span><span class="vname ${v.ready ? '' : 'boot'}">${esc(name)}</span>${facts.length ? `<span class="vmeta">${facts.join('')}</span>` : ''}</div>
+    ${path ? `<div class="vpath">${path}</div>` : ''}${where ? `<div class="vsrcs">${where}</div>` : ''}</div></div>`;
 }
 
 /** The screen a request was made from, as a table cell: its name, the navigators above it, and a flag when it fired as the screen mounted. */

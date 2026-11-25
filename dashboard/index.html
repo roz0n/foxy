@@ -59,7 +59,7 @@
     <button id="tabTimeline" class="active" role="tab" aria-selected="true" title="Timeline (1)"><svg class="ic"><use href="#i-timeline"/></svg><span class="tl">Timeline</span></button>
     <button id="tabEndpoints" role="tab" aria-selected="false" title="Endpoints (2)"><svg class="ic"><use href="#i-endpoints"/></svg><span class="tl">Endpoints</span></button>
   </div>
-  <label class="field search"><svg class="ic"><use href="#i-search"/></svg><input id="filter" aria-label="Filter requests" placeholder="Filter host, path, call site, team…" /><kbd aria-hidden="true">/</kbd></label>
+  <label class="field search"><svg class="ic"><use href="#i-search"/></svg><input id="filter" aria-label="Filter requests" placeholder="Filter host, path, call site, team…" /><span class="fcount" id="fcount" aria-live="polite" hidden></span><kbd aria-hidden="true">/</kbd></label>
   <span class="spacer"></span>
   <button id="helpBtn" class="btn icon-btn" aria-haspopup="dialog" aria-label="Help" title="Guide: how Foxy and markers work (?)"><svg class="ic"><use href="#i-help"/></svg></button>
   <div class="actions" id="actions" role="group" aria-label="Actions">
