@@ -4,6 +4,15 @@ import {
   registerFoxyNavigation,
 } from './FoxyView';
 
+const mockService: {
+  getCurrentRoute: () => unknown;
+  navigation?: unknown;
+} = { getCurrentRoute: () => undefined };
+jest.mock('../../core/NavigationService', () => ({
+  __esModule: true,
+  default: mockService,
+}));
+
 const rootState = {
   index: 0,
   routes: [
@@ -44,6 +53,20 @@ describe('captureView', () => {
       route: null,
       path: [],
       ready: false,
+    });
+  });
+
+  it('picks up the container from NavigationService once it has one', () => {
+    mockService.getCurrentRoute = () => ({ name: 'SwapsAmountView' });
+    mockService.navigation = {
+      isReady: () => true,
+      getRootState: () => rootState,
+      addListener: jest.fn(),
+    };
+
+    expect(captureView()).toMatchObject({
+      route: 'SwapsAmountView',
+      ready: true,
     });
   });
 

@@ -3,8 +3,8 @@ import { AppState } from 'react-native';
 /**
  * Which screen the user was on when a request was made (developer tooling, `__DEV__` + `FOXY=true` only).
  *
- * `NavigationService` registers the navigation container here once it exists. Until then (a fresh launch has no
- * navigator yet) a request is reported as made before navigation was ready. Only route NAMES and the names of
+ * The navigation container is taken from `NavigationService` once the app has set it, so the app needs no edit
+ * for this. Until then (a fresh launch has no navigator yet) a request is reported as made before navigation was ready. Only route NAMES and the names of
  * their params are reported, never param values.
  */
 export interface FoxyView {
@@ -91,7 +91,20 @@ export function registerFoxyNavigation(ref: NavLike): void {
   }
 }
 
+/** Registers `NavigationService`'s container once it answers `getCurrentRoute()` (its `navigation` getter throws before that). */
+const findNavigation = (): void => {
+  if (navigation) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- loaded on the first request, after the app has loaded it
+    const service = require('../../core/NavigationService').default;
+    if (service?.getCurrentRoute?.()) registerFoxyNavigation(service.navigation);
+  } catch {
+    // without NavigationService every request reads as made before navigation was ready
+  }
+};
+
 export function captureView(): FoxyView {
+  findNavigation();
   const appState = String(AppState.currentState ?? 'unknown');
   const { path, leaf } = focusedChain(currentState());
   if (!leaf) return { route: null, path: [], ready: false, appState };
