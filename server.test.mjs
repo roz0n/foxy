@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -13,11 +14,11 @@ let PORT = 0; // a fresh one per server, so a test never talks to the one before
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const api = async (path, init) => (await fetch(`http://localhost:${PORT}${path}`, init)).json();
 
-async function startServer() {
+async function startServer(metro) {
   PORT = 18000 + Math.floor(Math.random() * 1900);
   const dir = mkdtempSync(join(tmpdir(), 'foxy-server-'));
   const child = spawn(process.execPath, [join(HERE, 'server.mjs')], {
-    env: { ...process.env, FOXY_PORT: String(PORT), FOXY_REPO: dir, FOXY_CACHE_DIR: join(dir, 'cache'), FOXY_LOG_FILE: join(dir, 'foxy.jsonl'), FOXY_AUDIT_FILE: join(dir, 'audit.json'), FOXY_METRO: 'http://localhost:1' },
+    env: { ...process.env, FOXY_PORT: String(PORT), FOXY_REPO: dir, FOXY_CACHE_DIR: join(dir, 'cache'), FOXY_LOG_FILE: join(dir, 'foxy.jsonl'), FOXY_AUDIT_FILE: join(dir, 'audit.json'), FOXY_METRO: metro || 'http://localhost:1' },
     stdio: 'ignore',
   });
   for (let i = 0; i < 50; i++) {
@@ -34,7 +35,7 @@ async function appRuntime(s) {
   const send = (msg) => ws.send(JSON.stringify({ s, ...msg }));
   send({ type: 'hello', startedAt: Date.now(), platform: 'ios' });
   return {
-    request: (id, url) => send({ type: 'request', id, ts: Date.now(), url, method: 'GET', transport: 'fetch', initiator: [] }),
+    request: (id, url, initiator = []) => send({ type: 'request', id, ts: Date.now(), url, method: 'GET', transport: 'fetch', initiator }),
     close: () => ws.close(),
   };
 }
@@ -101,4 +102,54 @@ test('log storage reports the request log, and emptying it leaves the capture al
   assert.equal(after.logBytes, 0);
   const { requests } = await api('/api/requests');
   assert.equal(requests.length, 1, 'the capture on screen is untouched');
+});
+
+test('a request captured while Metro is down is symbolicated once Metro comes back', async (t) => {
+  // A stand-in Metro: answers /status and /symbolicate on a fixed port, like the real packager.
+  const metroPort = 18000 + Math.floor(Math.random() * 1900) + 2000;
+  const fakeMetro = () => new Promise((resolve) => {
+    const m = createServer((req, res) => {
+      if (req.url === '/status') { res.end('packager-status:running'); return; }
+      if (req.url === '/symbolicate') {
+        let body = '';
+        req.on('data', (c) => { body += c; });
+        req.on('end', () => {
+          const { stack } = JSON.parse(body);
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ stack: stack.map((f) => ({ file: 'app/Thing.ts', lineNumber: 7, column: 2, methodName: 'thing' })) }));
+        });
+        return;
+      }
+      res.statusCode = 404; res.end();
+    });
+    m.listen(metroPort, '127.0.0.1', () => resolve(m));
+  });
+  const bundle = `http://127.0.0.1:${metroPort}/index.bundle?platform=ios`;
+
+  let metro = await fakeMetro();
+  const server = await startServer(`http://127.0.0.1:${metroPort}`);
+  t.after(() => server.kill());
+  const app = await appRuntime('run-metro');
+  t.after(() => app.close());
+
+  // Metro is up: the first request symbolicates straight away.
+  app.request(1, 'https://example.com/up', [`at thing (${bundle}:100:5)`]);
+  await sleep(400);
+  assert.equal((await api('/api/requests')).requests.find((r) => r.id === 1).symbolicated, true);
+
+  // Metro goes away; a request arrives in the meantime.
+  await new Promise((r) => metro.close(r));
+  app.request(2, 'https://example.com/down', [`at thing (${bundle}:200:5)`]);
+  await sleep(400);
+  assert.equal((await api('/api/requests')).requests.find((r) => r.id === 2).symbolicated, false);
+
+  // Metro comes back: Foxy finds it on its own (it checks every few seconds) and fills the row in.
+  metro = await fakeMetro();
+  t.after(() => new Promise((r) => metro.close(r)));
+  let done = false;
+  for (let i = 0; i < 40 && !done; i++) {
+    await sleep(250);
+    done = (await api('/api/requests')).requests.find((r) => r.id === 2)?.symbolicated === true;
+  }
+  assert.equal(done, true, 'the missed request was symbolicated after Metro returned');
 });

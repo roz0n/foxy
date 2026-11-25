@@ -192,7 +192,9 @@ async function symbolicate(frames) {
   // Only bundle-URL frames can be symbolicated; native / InternalBytecode frames are skipped.
   const todo = frames.filter((f) => /^https?:/.test(f.file) && f.lineNumber && !symCache.has(f.raw));
   if (todo.length > 0) {
-    for (const base of metroCandidates(todo)) {
+    const candidates = metroCandidates(todo);
+    let reached = null;
+    for (const base of candidates) {
       try {
         const res = await fetch(`${base}/symbolicate`, {
           method: 'POST',
@@ -207,6 +209,7 @@ async function symbolicate(frames) {
           }),
         });
         if (!res.ok) continue;
+        reached = base;
         const { stack } = await res.json();
         stack.forEach((s, i) => {
           if (s && s.file && !/^https?:/.test(s.file)) {
@@ -224,8 +227,45 @@ async function symbolicate(frames) {
         // this Metro is not reachable: try the next candidate
       }
     }
+    setMetro(reached, candidates);
   }
   return frames.map((f) => symCache.get(f.raw) || f);
+}
+
+// A request captured while Metro is down used to stay unsymbolicated for good. Foxy now notices Metro coming back (it checks every
+// few seconds while it is away) and symbolicates the rows it missed.
+const METRO_POLL_MS = 4000;
+let metro = { up: null, origin: METRO, since: Date.now() };
+let metroPoll = null;
+const metroStatus = () => ({ ...metro });
+
+function setMetro(reached, candidates) {
+  const up = Boolean(reached);
+  const origin = reached || candidates[0] || METRO;
+  if (metro.up === up && metro.origin === origin) return;
+  const cameBack = up && metro.up === false;
+  metro = { up, origin, since: Date.now() };
+  if (up) {
+    clearInterval(metroPoll); metroPoll = null;
+    if (cameBack) resymbolicateMissed();
+  } else if (!metroPoll) {
+    metroPoll = setInterval(async () => {
+      for (const base of candidates) {
+        try {
+          const res = await fetch(`${base}/status`, { signal: AbortSignal.timeout(1500) });
+          if ((await res.text()).includes('packager-status:running')) { setMetro(base, candidates); return; }
+        } catch { /* still down */ }
+      }
+    }, METRO_POLL_MS);
+    metroPoll.unref?.();
+  }
+}
+
+/** Metro is back: symbolicate the requests that arrived while it was away. */
+function resymbolicateMissed() {
+  const missed = [...records.values()].filter((rec) => !rec.symbolicated && rec.frames?.some((f) => /^https?:/.test(f.file)));
+  if (missed.length) console.log(`[foxy] Metro is back, symbolicating ${missed.length} request(s) captured while it was away`);
+  missed.forEach(enqueueSymbolication);
 }
 
 function enqueueSymbolication(rec) {
@@ -477,6 +517,7 @@ const httpServer = createServer(async (req, res) => {
         sessions: [...sessions.values()],
         requests: records.size,
         metro: METRO,
+        metroStatus: metroStatus(),
         logFile: LOG_FILE,
         codeowners: { repo: Boolean(repoRules), core: Boolean(coreRules) },
         github: GITHUB,
