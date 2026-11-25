@@ -29,6 +29,20 @@ For a person with the Foxy app the whole flow is **open Foxy, pick the MetaMask 
 
 Afterwards the user has to do the parts only they can: build or start the debug app (`yarn start:ios` or `yarn start:android`, JS-only changes need no native rebuild), launch it, and watch the Timeline. Press `M` in the dashboard to drop a marker such as "Onboarding visible" so the capture splits into phases.
 
+## Answering "how do I…" questions about the dashboard
+
+People ask the agent instead of reading the guide. The full reference is `docs/GUIDE.md` in the Foxy repo, and the dashboard's `?` guide says the same. These are the answers that come up most.
+
+- **What called the fetch?** The Timeline's **Call Site** column shows the method that called `fetch`. Under it, `↳` names what called that method when the stack still has it: the nearest app frame (a hook or component), otherwise the next `@metamask` controller method. When there is no `↳` line, the stack ended there, because Hermes keeps no async stack after an `await`. Foxy never guesses a caller. **Launched From** is the screen the app was on. Click a row for the whole call chain.
+- **Column order.** ID, Method, Status, Host, Path, Call Site, Launched From, Code Owners, Time, Duration, Waterfall, like Charles, Proxyman and Chrome DevTools. Drag headers to reorder, drag edges to resize, **Reset Columns** (menu) restores the defaults.
+- **Highlight rows.** Open a row and click the highlighter icon at the right of its request line, or press `H`. Highlighted rows are tinted MetaMask orange. The **Highlighted** toggle beside Failed and Duplicates shows only those. Highlights survive a dashboard reload. **Menu > Clear Highlights** removes them all and is greyed out when there are none. **Clear** removes them with the capture.
+- **Log storage.** Foxy appends every request to a log file (`logs/foxy.jsonl` in the data folder, or `FOXY_LOG_FILE`). Only `replay.mjs` reads it. **Menu > Log Storage** shows its size and path, and **Clear Log File** empties it without touching the capture on screen or the audit verdicts. In the desktop app, **Foxy > Log Storage…** does the same, and **Foxy > Show Data Folder** opens the folder. The API is `GET /api/storage` and `POST /api/storage/clear`.
+- **Switch the MetaMask Mobile checkout.** Desktop app: **File > Switch MetaMask Mobile Folder…** (`⌘O`), or pick one from **Recent Folders**. Foxy restarts to apply it and warns first if that would drop a capture. If another Foxy (for example `yarn foxy`) is serving the window, the new folder is used on the next launch. From source, set `FOXY_REPO`.
+- **Markers vanished after the app reloaded.** They should not: a relaunched app continues the same capture, with a toast saying so. If they are gone, **Clear** was pressed or an older Foxy is still running on port 8098. Quit it and open the current one.
+- **Where is the data?** Desktop app: **Foxy > Show Data Folder** (logs, audit verdicts, CODEOWNERS cache). From source: the Foxy folder.
+
+When a question is not here, read `docs/GUIDE.md`, then answer from it rather than from memory.
+
 ## Diagnosing without changing anything
 
 ```bash

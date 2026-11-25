@@ -2,11 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-// buildAxis lives inside the dashboard's inline script; pull it out so the maths can be tested without a browser.
-const html = fs.readFileSync(new URL('./dashboard.html', import.meta.url), 'utf8');
+// buildAxis is a browser script, not a module; pull it out so the maths can be tested without a browser.
+const html = fs.readFileSync(new URL('./dashboard/js/04-format.js', import.meta.url), 'utf8');
 const start = html.indexOf('function buildAxis(');
 const end = html.indexOf('\n}\n', start) + 3;
-assert.ok(start > 0 && end > start, 'buildAxis not found in dashboard.html');
+assert.ok(start > 0 && end > start, 'buildAxis not found in dashboard/js/04-format.js');
 // eslint-disable-next-line no-new-func
 const buildAxis = new Function(`${html.slice(start, end)}\nreturn buildAxis;`)();
 

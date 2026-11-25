@@ -119,6 +119,21 @@ export function fmt(f) {
  * (a third-party lib like NetInfo can be the call site while the owner is the
  * app code that started it).
  */
+/**
+ * What called the call site, for the Call Site column's second line. Prefers the nearest app frame (the hook or component behind a
+ * controller call); otherwise the nearest app or @metamask frame running a different function (stacks repeat a method once per await).
+ * Third-party plumbing (a query library's `run`, `invoke`) is skipped. Null when the stack has nothing more: Hermes keeps no async stack,
+ * so a request made after an `await` usually ends at its call site, and nothing is made up to fill the gap.
+ */
+export function callerFrame(real) {
+  const [site, ...rest] = real;
+  if (!site || classifyFrame(site) === 'app') return null;
+  const app = rest.find((f) => classifyFrame(f) === 'app');
+  if (app) return app;
+  const name = cleanMethod(site.methodName);
+  return rest.find((f) => classifyFrame(f) === 'controller' && cleanMethod(f.methodName) !== name && cleanMethod(f.methodName) !== '<anonymous>') || null;
+}
+
 export function summarizeInitiator(frames) {
   const real = frames.filter((f) => classifyFrame(f) !== 'infra');
   const callSite = real[0] || null;
@@ -126,7 +141,9 @@ export function summarizeInitiator(frames) {
   const owner =
     real.slice(1).find((f) => ['app', 'controller'].includes(classifyFrame(f))) || null;
   const symbolicated = real.length > 0 && real.every((f) => !isBundleUrl(f.file));
+  const caller = callerFrame(real);
   return {
+    callerInfo: caller ? frameInfo(caller) : null,
     callSite: callSite ? fmt(callSite) : null,
     callSiteKind: callSite ? classifyFrame(callSite) : null,
     callSiteRef: callSite ? { kind: classifyFrame(callSite), shortPath: shortFile(callSite.file) } : null,
@@ -244,7 +261,7 @@ export function groupEndpoints(records) {
 /**
  * Markers split the capture into phases: each marker starts a phase that lasts until the next marker.
  * Requests made before the first marker belong to a leading "Before first marker" phase.
- * Returns [] when there are no markers. Mirrors computePhases in dashboard.html.
+ * Returns [] when there are no markers. Mirrors computePhases in dashboard/js/07-phases.js.
  */
 export function computePhases(records, markers = []) {
   if (!markers.length) return [];

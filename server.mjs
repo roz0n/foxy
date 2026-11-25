@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { readFile, mkdir, appendFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, mkdir, appendFile, writeFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { WebSocketServer } from 'ws';
@@ -107,12 +107,32 @@ const records = new Map();
 const markers = [];
 let markerSeq = 0;
 let latestSession = null;
+/** A relaunched app's session id -> the session whose capture it continues (see `hello` in ingest). */
+const continues = new Map();
+const captureOf = (s) => continues.get(s) ?? s;
 
 const uiClients = new Set();
 const broadcast = (message) => {
   const raw = JSON.stringify(message);
   for (const c of uiClients) if (c.readyState === 1) c.send(raw);
 };
+
+/** Bytes in a file, or in everything under a folder; 0 when it is not there. */
+async function sizeOf(path) {
+  try {
+    const s = await stat(path);
+    if (!s.isDirectory()) return s.size;
+    let total = 0;
+    for (const name of await readdir(path)) total += await sizeOf(join(path, name));
+    return total;
+  } catch {
+    return 0;
+  }
+}
+/** What Foxy keeps on disk: the request log (grows with every request, safe to empty) and the downloaded CODEOWNERS cache. */
+async function storageInfo() {
+  return { logFile: LOG_FILE, logDir: dirname(LOG_FILE), logBytes: await sizeOf(LOG_FILE), cacheDir: CACHE_DIR, cacheBytes: await sizeOf(CACHE_DIR) };
+}
 
 const log = async (entry) => {
   try {
@@ -204,6 +224,7 @@ function applySummary(rec) {
   rec.ownerCodeOwners = via?.owners ?? null;
   rec.callSiteInfo = s.callSiteInfo;
   rec.ownerInfo = s.ownerInfo;
+  rec.callerInfo = s.callerInfo;
 }
 
 const ownersOfInfo = (info) =>
@@ -212,35 +233,49 @@ const ownersOfInfo = (info) =>
 // ---- ingest ------------------------------------------------------------------
 function ingest(msg) {
   if (msg.type === 'hello') {
-    // The app re-sends `hello` on every WebSocket reconnect; only a new session id
-    // is a new app launch (and resets the dashboard).
-    const isNew = !sessions.has(msg.s);
-    const previous = sessions.get(msg.s); // a reconnect must keep what Clear reset (time zero and the id offset)
-    sessions.set(msg.s, {
+    // The app re-sends `hello` on every WebSocket reconnect. A new session id is a new JS runtime (a Metro reload, a crash, a relaunch, a
+    // fresh install). It continues the capture on screen rather than replacing it, or every reload would take the markers with it; Clear
+    // is how you start a fresh capture.
+    if (!sessions.has(msg.s) && !continues.has(msg.s) && sessions.has(latestSession)) {
+      const capture = sessions.get(latestSession);
+      continues.set(msg.s, latestSession);
+      // the new runtime numbers its requests from 1 again, so carry on from the last number shown
+      capture.idBase = (capture.idBase || 0) - (capture.lastId || 0);
+      capture.lastId = 0;
+      Object.assign(capture, { platform: msg.platform, connectedAt: Date.now(), relaunches: (capture.relaunches || 0) + 1 });
+      console.log(`[foxy] app relaunched (${msg.platform}) session ${msg.s}, continuing the capture of ${latestSession}`);
+      broadcast({ type: 'relaunch', session: { ...capture } });
+      return;
+    }
+    const sid = captureOf(msg.s);
+    const isNew = !sessions.has(sid);
+    const previous = sessions.get(sid); // a reconnect must keep what Clear reset (time zero and the id offset)
+    sessions.set(sid, {
       ...previous,
-      id: msg.s,
+      id: sid,
       startedAt: previous?.startedAt ?? msg.startedAt,
       platform: msg.platform,
       connectedAt: Date.now(),
     });
-    latestSession = msg.s;
+    latestSession = sid;
     console.log(
       `[foxy] app ${isNew ? 'connected' : 'reconnected'} (${msg.platform}) session ${msg.s}`,
     );
     if (isNew) {
-      broadcast({ type: 'session', session: sessions.get(msg.s) });
+      broadcast({ type: 'session', session: sessions.get(sid) });
       // A marker dropped while no app was connected has no session, and the dashboard only lists the latest session's markers, so it would
       // vanish. The first session to connect adopts it; it came before the app did, so its phase starts at time zero.
       const orphans = markers.filter((m) => m.session == null);
       if (orphans.length) {
-        for (const m of orphans) { m.session = msg.s; m.relMs = Math.max(0, m.ts - (sessions.get(msg.s).startedAt ?? m.ts)); }
+        for (const m of orphans) { m.session = sid; m.relMs = Math.max(0, m.ts - (sessions.get(sid).startedAt ?? m.ts)); }
         broadcast({ type: 'markers', markers: sessionMarkers(latestSession) });
       }
     }
     return;
   }
-  const session = sessions.get(msg.s);
-  const key = `${msg.s}:${msg.id}`;
+  const sid = captureOf(msg.s);
+  const session = sessions.get(sid);
+  const key = `${msg.s}:${msg.id}`; // the raw session keeps keys unique, since a relaunched app numbers from 1 again
   if (msg.type === 'request') {
     const started = session?.startedAt ?? msg.ts;
     if (session) {
@@ -253,7 +288,7 @@ function ingest(msg) {
     const { host, path, query } = parseUrl(msg.url);
     const rec = {
       key,
-      session: msg.s,
+      session: sid,
       id: Number.isFinite(Number(msg.id)) ? Number(msg.id) - (session?.idBase || 0) : msg.id, // the request number: starts again at 1 after Clear
       ts: msg.ts,
       relMs: msg.ts - started,
@@ -336,6 +371,21 @@ const readBody = (req) =>
     });
   });
 
+const DASHBOARD_DIR = join(__dirname, 'dashboard');
+/**
+ * The dashboard page: dashboard/index.html with styles.css and every js/*.js (in file-name order) inlined as one <style> and one <script>.
+ * One script on purpose: the files share a scope and call each other's functions, and separate <script> tags would let a timer or an
+ * animation frame run between two of them, before the later one has defined what it needs. Read on every request, so a reload shows an edit.
+ */
+async function dashboardPage() {
+  const [html, css, names] = await Promise.all([
+    readFile(join(DASHBOARD_DIR, 'index.html'), 'utf-8'),
+    readFile(join(DASHBOARD_DIR, 'styles.css'), 'utf-8'),
+    readdir(join(DASHBOARD_DIR, 'js')),
+  ]);
+  const scripts = await Promise.all(names.filter((n) => n.endsWith('.js')).sort().map(async (n) => `// ---- ${n} ----\n${await readFile(join(DASHBOARD_DIR, 'js', n), 'utf-8')}`));
+  return html.replace('<!-- foxy:styles -->', () => `<style>\n${css}</style>`).replace('<!-- foxy:scripts -->', () => `<script>\n${scripts.join('\n')}</script>`);
+}
 const VENDOR_FILES = { 'rive.js': 'text/javascript; charset=utf-8', 'rive.wasm': 'application/wasm', 'foxy-loading.riv': 'application/octet-stream' };
 // Installable as an app (PWA): the manifest, the service worker that keeps the shell usable when the server is down, and the icons.
 const PWA_FILES = Object.fromEntries(['icon-192.png', 'icon-512.png', 'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png'].map((name) => [name, 'image/png']));
@@ -363,7 +413,7 @@ const httpServer = createServer(async (req, res) => {
   try {
     if (p === '/' || p === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(await readFile(join(__dirname, 'dashboard.html'), 'utf-8'));
+      res.end(await dashboardPage());
     } else if (p === '/font/grotzec-cond-bold.otf') {
       // the wordmark face, read from the app's font folder (not copied) so there is one source of truth; without an app folder the wordmark falls back to the system font
       const font = join(REPO, 'app', 'fonts', 'GrotzecCond', 'GrotzecCond-Bold.otf');
@@ -571,6 +621,12 @@ const httpServer = createServer(async (req, res) => {
         broadcast({ type: 'markers', markers: sessionMarkers(latestSession) });
         json(res, { ok: true });
       }
+    } else if (p === '/api/storage') {
+      json(res, await storageInfo());
+    } else if (p === '/api/storage/clear' && req.method === 'POST') {
+      // Only the request log is emptied. Its folder also holds audit.json (your verdicts), which stays.
+      try { await writeFile(LOG_FILE, ''); } catch { /* nothing logged yet */ }
+      json(res, { ok: true, ...(await storageInfo()) });
     } else if (p === '/api/clear' && req.method === 'POST') {
       records.clear();
       markers.length = 0;

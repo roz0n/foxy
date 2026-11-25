@@ -128,6 +128,43 @@ test('call site is the real caller; owner is the nearest app/@metamask frame', (
   assert.match(s.text, /<-/);
 });
 
+test('caller: the hook behind a controller call, skipping the controller frames in between', () => {
+  const ctl = '/r/node_modules/@metamask/core-backend/dist/util.cjs';
+  const s = summarizeInitiator([
+    sym('successfulFetch', ctl, 329, 33),
+    sym('successfulFetch', ctl, 330, 5), // the same method again, one frame per await
+    sym('handleFetch', ctl, 340, 12),
+    sym('t1', '/r/app/components/Views/Homepage/Sections/Tokens/hooks/usePopularTokens.ts', 42, 9),
+  ]);
+  assert.equal(s.callerInfo.method, 't1');
+  assert.equal(s.callerInfo.kind, 'app');
+  assert.equal(s.callerInfo.file, 'app/components/Views/Homepage/Sections/Tokens/hooks/usePopularTokens.ts');
+});
+
+test('caller: without an app frame, the next @metamask function with a different name', () => {
+  const ctl = '/r/node_modules/@metamask/snapshot-controller/dist/index.cjs';
+  const s = summarizeInitiator([
+    sym('#fetchAndValidateGlobalSnapshot', ctl, 10, 1),
+    sym('#fetchAndValidateGlobalSnapshot', ctl, 11, 1),
+    sym('fetchGlobalSnapshot', ctl, 20, 1),
+  ]);
+  assert.equal(s.callerInfo.method, 'fetchGlobalSnapshot');
+});
+
+test('caller: none when the stack ends at the call site, or only third-party plumbing and anonymous frames follow', () => {
+  const rpc = '/r/node_modules/@metamask/network-controller/dist/rpc-service/rpc-service.cjs';
+  assert.equal(summarizeInitiator([sym('#fetchValidated', '/r/node_modules/@metamask/money/dist/service.cjs', 118, 37)]).callerInfo, null);
+  assert.equal(summarizeInitiator([
+    sym('anonymous', rpc, 463, 49), sym('anonymous', rpc, 470, 3),
+    sym('run', '/r/node_modules/cockatiel/dist/Policy.js', 10, 1), sym('invoke', '/r/node_modules/cockatiel/dist/Retry.js', 5, 1),
+  ]).callerInfo, null);
+});
+
+test('caller: none when the call site is already app code', () => {
+  const s = summarizeInitiator([sym('loadPrices', '/r/app/core/Prices.ts', 5, 1), sym('useThing', '/r/app/hooks/useThing.ts', 9, 1)]);
+  assert.equal(s.callerInfo, null);
+});
+
 test('unsymbolicated frames still show method and line, without the URL', () => {
   const frames = [
     parseFrame(`at foxyFetch (${BUNDLE}:1:1)`),
@@ -407,8 +444,8 @@ test('auditKey is the label for a marker phase, the id otherwise', () => {
 });
 
 test('the verdict wording matches the dashboard', async () => {
-  const html = (await import('node:fs')).readFileSync(new URL('./dashboard.html', import.meta.url), 'utf8');
-  for (const v of VERDICTS) assert.ok(html.includes(`id: '${v.id}', label: '${v.label}'`) && html.includes(`tip: '${v.tip}'`), `dashboard.html is missing the ${v.id} verdict as lib.mjs words it`);
+  const html = (await import('node:fs')).readFileSync(new URL('./dashboard/js/09-verdicts.js', import.meta.url), 'utf8');
+  for (const v of VERDICTS) assert.ok(html.includes(`id: '${v.id}', label: '${v.label}'`) && html.includes(`tip: '${v.tip}'`), `dashboard/js/09-verdicts.js is missing the ${v.id} verdict as lib.mjs words it`);
 });
 
 test('fileSlug makes a safe file name', () => {

@@ -8,13 +8,23 @@
 import { app, BrowserWindow, Menu, dialog, shell, clipboard } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appDirProblem, mcpConfig } from './helpers.mjs';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'); // where server.mjs, dashboard.html and mcp.mjs live
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'); // where server.mjs, dashboard/ and mcp.mjs live
 const DEFAULT_PORT = 8098;
 const SMOKE = process.env.FOXY_SMOKE === '1';
+const MAC = process.platform === 'darwin';
+// macOS: no title bar; the dashboard header takes its place, with the traffic lights centered in it (the header is 55px tall).
+// !important because the page's own header padding would otherwise win
+const TRAFFIC_LIGHTS = { x: 18, y: 20 };
+const TITLE_BAR_CSS = `
+  header { padding-left: 88px !important; -webkit-app-region: drag; }
+  header * { -webkit-app-region: no-drag; }
+  header .brand, header .brand * { -webkit-app-region: drag; }
+`;
+const FULLSCREEN_CSS = 'header { padding-left: 16px !important; }';
 
 app.setName('Foxy');
 if (process.env.FOXY_DATA_DIR) app.setPath('userData', process.env.FOXY_DATA_DIR); // tests and CI keep their settings out of the real ones
@@ -40,7 +50,7 @@ async function chooseAppDir({ first = false } = {}) {
     await dialog.showMessageBox({
       type: 'info',
       message: 'Welcome to Foxy',
-      detail: 'Foxy reads your MetaMask Mobile checkout to find the team that owns each request and the screen it came from. Choose that folder next. You can change it later from the Foxy menu, or skip it and still see every request.',
+      detail: 'Foxy reads your MetaMask Mobile checkout to find the team that owns each request and the screen it came from. Choose that folder next. You can switch folders any time from File > Switch MetaMask Mobile Folder (⌘O), or skip it and still see every request.',
       buttons: ['Choose Folder…'],
     });
   }
@@ -63,15 +73,50 @@ async function chooseAppDir({ first = false } = {}) {
 
 async function changeAppDir() {
   const dir = await chooseAppDir();
-  if (!dir) return;
-  settings.appDir = dir; settings.asked = true; saveSettings();
-  if (startedServer) { app.relaunch(); app.exit(0); } // the server reads it once, when it starts
+  if (dir) await useAppDir(dir);
+}
+
+/** Points Foxy at another checkout. The server reads the folder once, when it starts, so Foxy restarts, and that clears the capture. */
+async function useAppDir(dir) {
+  if (dir === settings.appDir) return;
+  if (!existsSync(dir)) {
+    settings.recent = (settings.recent || []).filter((d) => d !== dir); saveSettings(); buildMenu();
+    await dialog.showMessageBox({ type: 'warning', message: 'That folder is gone.', detail: dir });
+    return;
+  }
+  if (!startedServer) {
+    await dialog.showMessageBox({
+      type: 'warning',
+      message: 'Another Foxy is serving this window',
+      detail: `Foxy found a server already running on port ${port} (for example \`yarn foxy\` in a terminal) and is showing that one, so it cannot switch folders. Stop that server and open Foxy again; it will use:\n\n${dir}`,
+    });
+    remember(dir);
+    return;
+  }
+  const requests = await fetch(`http://127.0.0.1:${port}/api/status`).then((r) => r.json()).then((s) => s.requests).catch(() => 0);
+  if (requests) {
+    const { response } = await dialog.showMessageBox({
+      type: 'question',
+      message: 'Switch folders and restart Foxy?',
+      detail: `Foxy restarts to read ${dir}.\n\nThe current capture (${requests} request${requests === 1 ? '' : 's'}) and its markers are cleared. Export it first from the dashboard menu if you want to keep it.`,
+      buttons: ['Switch and Restart', 'Cancel'], defaultId: 0, cancelId: 1,
+    });
+    if (response !== 0) return;
+  }
+  remember(dir);
+  app.relaunch(); app.exit(0);
+}
+
+/** Saves the folder as the current one and puts it first in File > Recent Folders. */
+function remember(dir) {
+  settings.recent = [dir, ...(settings.recent || []).filter((d) => d !== dir && d !== settings.appDir), ...(settings.appDir && settings.appDir !== dir ? [settings.appDir] : [])].slice(0, 6);
+  settings.appDir = dir; settings.asked = true; saveSettings(); buildMenu();
 }
 
 /** Turns FOXY="true" on in the app's .js.env (the same step `setup.mjs` does), creating the file from .js.env.example when needed. */
 async function prepareApp() {
   const dir = settings.appDir;
-  if (!dir) { await dialog.showMessageBox({ type: 'info', message: 'Choose your MetaMask Mobile folder first.', detail: 'Foxy menu > Choose MetaMask Mobile Folder…' }); return; }
+  if (!dir) { await dialog.showMessageBox({ type: 'info', message: 'Choose your MetaMask Mobile folder first.', detail: 'File > Switch MetaMask Mobile Folder… (⌘O)' }); return; }
   const { setEnvFlag } = await import('../setup.mjs');
   const envFile = join(dir, '.js.env');
   const example = join(dir, '.js.env.example');
@@ -100,21 +145,61 @@ async function copyMcpConfig() {
   });
 }
 
+const sizeText = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+
+/** Foxy > Log Storage…: how big the request log is and where it lives, with a button to empty it. Asks the running server, so it is right even when another Foxy serves the window. */
+async function logStorage() {
+  let info;
+  try { info = await (await fetch(`http://localhost:${port}/api/storage`)).json(); } catch { /* server not answering */ }
+  if (!info) { await dialog.showMessageBox({ type: 'warning', message: 'Foxy is not answering, so the log size is unknown.', detail: `Data folder: ${DATA}` }); return; }
+  const { response } = await dialog.showMessageBox({
+    type: 'info',
+    message: `Request log: ${sizeText(info.logBytes)}`,
+    detail: `${info.logFile}\n\nIt grows with every request Foxy sees and is only used to replay a capture. Emptying it does not touch the requests on screen or your audit verdicts.\n\nCODEOWNERS cache: ${sizeText(info.cacheBytes)} (${info.cacheDir})`,
+    buttons: ['Close', 'Empty Log File', 'Show in Finder'],
+    defaultId: 0,
+    cancelId: 0,
+  });
+  if (response === 1) {
+    await fetch(`http://localhost:${port}/api/storage/clear`, { method: 'POST' }).catch(() => {});
+  } else if (response === 2) {
+    shell.showItemInFolder(info.logFile);
+  }
+}
+
 function buildMenu() {
   const isMac = process.platform === 'darwin';
-  const foxy = [
-    { label: 'Choose MetaMask Mobile Folder…', click: () => void changeAppDir() },
-    { label: 'Set Up App for Foxy…', click: () => void prepareApp() },
+  const current = settings.appDir;
+  const recent = (settings.recent || []).filter((d) => d !== current);
+  const file = [
+    { label: current ? `MetaMask Mobile: ${basename(current)}` : 'No MetaMask Mobile folder', enabled: false, toolTip: current || '' },
+    { label: 'Switch MetaMask Mobile Folder…', accelerator: 'CmdOrCtrl+O', click: () => void changeAppDir() },
+    {
+      label: 'Recent Folders',
+      enabled: recent.length > 0,
+      submenu: recent.length ? [
+        ...recent.map((d) => ({ label: d.replace(homedir(), '~'), click: () => void useAppDir(d) })),
+        { type: 'separator' },
+        { label: 'Clear Menu', click: () => { settings.recent = []; saveSettings(); buildMenu(); } },
+      ] : [{ label: 'None', enabled: false }],
+    },
+    { label: 'Show Folder in Finder', enabled: Boolean(current), click: () => void shell.openPath(current) },
     { type: 'separator' },
+    { label: 'Set Up App for Foxy…', enabled: Boolean(current), click: () => void prepareApp() },
+    ...(isMac ? [{ type: 'separator' }, { role: 'close' }] : []),
+  ];
+  const foxy = [
     { label: 'Open Dashboard in Browser', click: () => void shell.openExternal(dashboardUrl()) },
     { label: 'Copy MCP Config…', click: () => void copyMcpConfig() },
     { label: 'Show Data Folder', click: () => void shell.openPath(DATA) },
+    { label: 'Log Storage…', click: () => void logStorage() },
   ];
   const template = [
     ...(isMac ? [{
       label: 'Foxy',
       submenu: [{ role: 'about' }, { type: 'separator' }, ...foxy, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }],
     }] : [{ label: 'Foxy', submenu: [...foxy, { type: 'separator' }, { role: 'quit' }] }]),
+    { label: 'File', submenu: file },
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
@@ -128,9 +213,22 @@ function createWindow() {
   win = new BrowserWindow({
     width: b.width || 1480, height: b.height || 940, x: b.x, y: b.y, minWidth: 900, minHeight: 600,
     title: 'Foxy', backgroundColor: '#000000', show: false,
+    ...(MAC ? { titleBarStyle: 'hidden', trafficLightPosition: TRAFFIC_LIGHTS } : {}),
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
   });
   win.once('ready-to-show', () => win?.show());
+  if (MAC) {
+    // the dashboard header is the title bar; in full screen the traffic lights are gone, so it gives their room back
+    let fullCss = null;
+    const setFull = async (full) => {
+      if (!win || win.isDestroyed()) return;
+      if (full && !fullCss) fullCss = await win.webContents.insertCSS(FULLSCREEN_CSS);
+      else if (!full && fullCss) { await win.webContents.removeInsertedCSS(fullCss); fullCss = null; }
+    };
+    win.webContents.on('did-finish-load', () => { fullCss = null; void win.webContents.insertCSS(TITLE_BAR_CSS); void setFull(win.isFullScreen()); });
+    win.on('enter-full-screen', () => void setFull(true));
+    win.on('leave-full-screen', () => void setFull(false));
+  }
   let timer = null;
   const remember = () => { clearTimeout(timer); timer = setTimeout(() => { if (win && !win.isDestroyed() && !win.isMinimized() && !win.isFullScreen()) { settings.bounds = win.getBounds(); saveSettings(); } }, 400); };
   win.on('resize', remember); win.on('move', remember);
@@ -171,9 +269,26 @@ async function smoke() {
   const status = await (await fetch(`http://127.0.0.1:${port}/api/status`)).json();
   const page = await fetch(`http://127.0.0.1:${port}/`);
   const html = await page.text();
-  const ok = result !== 'busy' && page.ok && html.includes('<title>Foxy</title>') && 'requests' in status;
-  console.log(`${ok ? 'SMOKE_OK' : 'SMOKE_FAIL'} ${JSON.stringify({ result, requests: status.requests, repo: process.env.FOXY_REPO, version: status.build?.version ?? null })}`);
+  const dashboard = await loadDashboard();
+  buildMenu();
+  const menu = Menu.getApplicationMenu()?.items.map((item) => item.label) ?? [];
+  const ok = result !== 'busy' && page.ok && html.includes('<title>Foxy</title>') && 'requests' in status && dashboard.ready && !dashboard.errors.length && menu.includes('File');
+  console.log(`${ok ? 'SMOKE_OK' : 'SMOKE_FAIL'} ${JSON.stringify({ result, requests: status.requests, repo: process.env.FOXY_REPO, version: status.build?.version ?? null, dashboard, menu })}`);
   app.exit(ok ? 0 : 1);
+}
+
+/** Opens the dashboard in a hidden window and reports script errors: its files share one scope, so a wrong load order only shows in a browser. */
+async function loadDashboard() {
+  const probe = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true } });
+  const errors = [];
+  probe.webContents.on('console-message', (event) => { if (event.level === 'error') errors.push(`${event.message} (${event.sourceId.replace(/^https?:\/\/[^/]+/, '')}:${event.lineNumber})`); });
+  await probe.loadURL(dashboardUrl());
+  await new Promise((r) => setTimeout(r, 1500));
+  const ready = await probe.webContents.executeJavaScript(
+    "typeof render === 'function' && typeof connect === 'function' && typeof openHelp === 'function' && Boolean(document.querySelector('#tabTimeline.active'))",
+  ).catch((error) => { errors.push(String(error)); return false; });
+  probe.destroy();
+  return { ready, errors };
 }
 
 process.on('uncaughtException', (error) => console.error('[foxy] uncaught:', error));
@@ -192,7 +307,7 @@ if (!app.requestSingleInstanceLock() && !SMOKE) {
       settings.asked = true;
       const dir = await chooseAppDir({ first: true });
       if (dir) settings.appDir = dir;
-      saveSettings();
+      saveSettings(); buildMenu();
     }
     if ((await ensureServer()) === 'busy') { app.quit(); return; }
     createWindow();

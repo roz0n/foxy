@@ -1,0 +1,144 @@
+<!doctype html>
+<!-- The server fills in foxy:styles (styles.css) and foxy:scripts (js/*.js, in file-name order) as one inline <style> and <script>. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Foxy</title>
+<script>try{var t=localStorage.getItem('foxy.theme.v1');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='54' font-size='88' text-anchor='middle' dominant-baseline='central'%3E%F0%9F%A6%8A%3C/text%3E%3C/svg%3E" />
+<link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#000000" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Foxy" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))</script>
+<!-- foxy:styles -->
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-timeline" viewBox="0 0 24 24"><rect x="3" y="4.5" width="11" height="4" rx="2"/><rect x="8" y="10" width="13" height="4" rx="2"/><rect x="5" y="15.5" width="9" height="4" rx="2"/></symbol>
+  <symbol id="i-endpoints" viewBox="0 0 24 24"><circle cx="4.5" cy="6" r="2"/><circle cx="4.5" cy="12" r="2"/><circle cx="4.5" cy="18" r="2"/><rect x="9" y="4.5" width="12" height="3" rx="1.5"/><rect x="9" y="10.5" width="12" height="3" rx="1.5"/><rect x="9" y="16.5" width="12" height="3" rx="1.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25a1 1 0 0 0 1.42-1.42l-4.25-4.24A7.5 7.5 0 0 0 10.5 3zm0 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6z"/></symbol>
+  <symbol id="i-hl" viewBox="0 0 24 24"><path d="M15.6 3.4a1.6 1.6 0 0 1 2.2 0l2.8 2.8a1.6 1.6 0 0 1 0 2.2l-8.3 8.3-5-5z"/><path d="M6.4 12.6l5 5-1.9 1.9H4.5v-5z"/><rect x="3" y="20.5" width="9" height="1.8" rx=".9"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M9 2h6a1.5 1.5 0 0 1 1.5 1.5V4H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1.5v-.5A1.5 1.5 0 0 1 9 2zM8 11v1.6h8V11H8zm0 4v1.6h5.5V15H8z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
+  <symbol id="i-network" viewBox="0 0 24 24"><rect x="2.6" y="3.6" width="18.8" height="12.8" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M8.2 20.4h7.6M12 16.6v3.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M9.4 13V8m0 0L7.5 9.9M9.4 8l1.9 1.9M14.6 8v5m0 0-1.9-1.9m1.9 1.9 1.9-1.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-screen" viewBox="0 0 24 24"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.4 18.2h3.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3.6 5.2A1 1 0 0 1 4.4 3.6h15.2a1 1 0 0 1 .8 1.6L14 13.3v6.1a1 1 0 0 1-1.45.9l-2.2-1.1a1 1 0 0 1-.55-.9v-5L3.6 5.2z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.9l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
+  <symbol id="i-star-o" viewBox="0 0 24 24"><path d="M12 2.9l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="2.4" rx="1.2"/><rect x="3" y="10.8" width="18" height="2.4" rx="1.2"/><rect x="3" y="16.6" width="18" height="2.4" rx="1.2"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 5.5v13l8-6.5z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4.2" height="14" rx="1.4"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.2 5.4v13.2c0 .8.9 1.3 1.6.9l10.2-6.6c.6-.4.6-1.3 0-1.7L9.8 4.5c-.7-.4-1.6.1-1.6.9z"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7z"/></symbol>
+  <!-- phase toolbar set: one stroke weight, same live area, so the row reads evenly -->
+  <symbol id="i-tb-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v12M7.5 11.5 12 16l4.5-4.5M4 16.5V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.5"/></g></symbol>
+  <symbol id="i-tb-focus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></g></symbol>
+  <symbol id="i-tb-stop" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor"/></symbol>
+  <symbol id="i-tb-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 8.2v7.6l6-3.8z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/></symbol>
+  <symbol id="i-tb-edit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19.5 8.5a2.83 2.83 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></g></symbol>
+  <symbol id="i-tb-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5"/></g></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
+</svg>
+<header>
+  <div class="brand"><span class="logo" data-fox="34" aria-hidden="true"><span class="emo">🦊</span></span><span class="wordmark">Foxy</span></div>
+  <button id="conn" class="btn icon-btn conn-btn" type="button" aria-pressed="false" aria-label="Pause: hold live updates" title="Connecting…" disabled><svg class="ic"><use href="#i-pause"/></svg></button>
+  <div class="tabs" role="tablist" aria-label="View">
+    <button id="tabTimeline" class="active" role="tab" aria-selected="true" title="Timeline (1)"><svg class="ic"><use href="#i-timeline"/></svg><span class="tl">Timeline</span></button>
+    <button id="tabEndpoints" role="tab" aria-selected="false" title="Endpoints (2)"><svg class="ic"><use href="#i-endpoints"/></svg><span class="tl">Endpoints</span></button>
+  </div>
+  <label class="field search"><svg class="ic"><use href="#i-search"/></svg><input id="filter" aria-label="Filter requests" placeholder="Filter host, path, call site, team…" /><kbd aria-hidden="true">/</kbd></label>
+  <span class="spacer"></span>
+  <button id="helpBtn" class="btn icon-btn" aria-haspopup="dialog" aria-label="Help" title="Guide: how Foxy and markers work (?)"><svg class="ic"><use href="#i-help"/></svg></button>
+  <div class="actions" id="actions" role="group" aria-label="Actions">
+    <div class="menu-row"><span class="mr-l" id="tfLabel">Time Format</span><div class="tfmt" id="timeSeg" role="group" aria-labelledby="tfLabel"></div></div>
+    <div class="sep" role="separator"></div>
+    <div class="menu-row"><span class="mr-l" id="themeLabel">Theme</span><div class="themes" id="themeGrid" role="radiogroup" aria-labelledby="themeLabel"></div></div>
+    <div class="sep" role="separator"></div>
+    <button id="reset" class="btn" title="Restore default column order and widths"><svg class="ic"><use href="#i-reset"/></svg><span>Reset Columns</span></button>
+    <button id="export" class="btn" aria-haspopup="dialog" title="Export the capture: JSON, CSV or a markdown table"><svg class="ic"><use href="#i-tb-download"/></svg><span>Export…</span></button>
+    <div class="sep" role="separator"></div>
+    <button id="clearHl" class="btn" disabled title="Remove the highlight from every request"><svg class="ic"><use href="#i-hl"/></svg><span>Clear Highlights</span></button>
+    <div class="menu-row store"><span class="mr-l">Log Storage</span><div class="store-info" id="storeInfo">…</div></div>
+    <button id="clearLog" class="btn" title="Empty the request log file. Your verdicts and the captured requests on screen are not touched"><svg class="ic"><use href="#i-trash"/></svg><span>Clear Log File</span></button>
+    <div class="sep" role="separator"></div>
+    <button id="clear" class="btn danger" title="Clear all captured requests"><svg class="ic"><use href="#i-trash"/></svg><span>Clear</span></button>
+    <div class="build" id="buildInfo" hidden></div>
+  </div>
+  <button id="menuBtn" class="btn menu-btn icon-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false" aria-controls="actions" title="Menu"><svg class="ic"><use href="#i-menu"/></svg></button>
+</header>
+<div class="subbar">
+  <span id="count" class="stat" title="Requests captured in this session"><svg class="ic"><use href="#i-network"/></svg><b>0</b><span class="count-lbl">requests</span></span>
+  <div class="seg" id="seg" role="group" aria-label="Filter by ownership">
+    <button data-cat="all" title="Every request">All <span class="n"></span></button>
+    <button data-cat="ours" title="Call site is in code with a CODEOWNERS team (app or core)"><i class="dot ours"></i>We Own <span class="n"></span></button>
+    <button data-cat="third" title="Call site is inside a third-party package"><i class="dot third"></i>Third-party <span class="n"></span></button>
+    <button data-cat="unowned" title="No CODEOWNERS team and not a third-party package (for example @metamask packages from other repos)"><i class="dot unowned"></i>Unowned <span class="n"></span></button>
+  </div>
+  <button class="tog" data-flag="errors" title="Errors, aborts and 4xx/5xx responses"><i class="dot err"></i>Failed <span class="n"></span></button>
+  <button class="tog" data-flag="dupes" title="Identical request made more than once: same method, URL and (for POST/PUT/PATCH) body"><i class="dot dup"></i>Duplicates <span class="n"></span></button>
+  <button class="tog" data-flag="hl" title="Only the requests you highlighted (open a row and turn on Highlight, or press H)"><i class="dot hl"></i>Highlighted <span class="n"></span></button>
+  <span class="spacer"></span>
+  <button id="markBtn" class="btn flt-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="mkpop" title="Markers: label moments in the app to split the capture into phases (M)"><svg class="ic"><use href="#i-flag"/></svg><span class="lbl">Markers</span><b class="badge-n" id="markCount" hidden>0</b></button>
+  <div class="mkpop" id="mkpop" role="dialog" aria-label="Markers">
+    <h2><svg class="ic"><use href="#i-flag"/></svg>Markers<span class="sp"></span><button id="mkHelp" title="How markers work"><svg class="ic"><use href="#i-help"/></svg>How It Works</button><button id="mkClose" class="icon-btn sm" aria-label="Close markers"><svg class="ic"><use href="#i-close"/></svg></button></h2>
+    <div class="mkadd">
+      <label class="field"><svg class="ic"><use href="#i-flag"/></svg><input id="marker" aria-label="Marker label" maxlength="120" autocomplete="off" placeholder="What just happened? Press Enter" /></label>
+      <select id="mkWhen" aria-label="When it happened" title="When did it happen? Backdate it if you noticed late.">
+        <option value="0">Now</option><option value="5000">5s ago</option><option value="10000">10s ago</option><option value="30000">30s ago</option><option value="60000">1m ago</option>
+      </select>
+      <button id="mkAdd" class="go icon-btn" aria-label="Add marker" title="Add marker"><svg class="ic"><use href="#i-plus"/></svg></button>
+    </div>
+    <div class="mk-h">Quick Add</div>
+    <div class="presets" id="mkPresets"></div>
+    <div class="mk-h">This Capture</div>
+    <div id="mkList"></div>
+    <div class="mk-foot"><kbd class="k">M</kbd> opens this panel anywhere · <kbd class="k">Enter</kbd> adds · <kbd class="k">Esc</kbd> closes</div>
+  </div>
+  <button id="fltBtn" class="btn flt-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="fltpop" title="Filters: narrow the capture by code owner, status, method, host or speed (F)"><svg class="ic"><use href="#i-filter"/></svg><span class="lbl">Filters</span><b class="badge-n" id="fltCount" hidden>0</b></button>
+  <div class="mkpop fpop" id="fltpop" role="dialog" aria-label="Filters">
+    <h2><svg class="ic"><use href="#i-filter"/></svg>Filters<span class="sp"></span><button id="fltClear" type="button" title="Remove every filter in this panel">Clear All</button><button id="fltClose" class="icon-btn sm" type="button" aria-label="Close filters"><svg class="ic"><use href="#i-close"/></svg></button></h2>
+    <div class="mk-h">Quick Filters</div>
+    <div class="presets" id="fltPresets"></div>
+    <div id="fltBody"></div>
+    <div class="mk-foot">Pick several values to match any of them. Different sections must all match. <kbd class="k">F</kbd> opens this panel · <kbd class="k">Esc</kbd> closes</div>
+  </div>
+</div>
+<div class="fltrow" id="fltRow" aria-label="Active filters" inert><div class="fltrow-in"><div class="fltrow-pad"><span id="ownerPill"></span><span id="phasePill"></span><span id="advPills" class="advpills"></span><span id="fltGhost" class="fltghost" aria-hidden="true"></span><span id="auditCtl" class="audit-ctl" hidden></span></div></div></div>
+<div class="strip" aria-label="Requests over time"><div class="stripin" id="stripin"></div><div class="axis" id="axis"></div></div>
+<main>
+  <table id="timeline"><colgroup></colgroup><thead><tr></tr></thead><tbody></tbody></table>
+  <table id="endpoints" hidden><colgroup></colgroup><thead><tr></tr></thead><tbody></tbody></table>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="vLegend" class="vlegend" role="dialog" aria-label="What the verdicts mean">
+  <div class="vl-h">Verdicts</div>
+  <dl></dl>
+  <div class="vl-f">Per phase: one endpoint can differ between phases.</div>
+</div>
+<dialog id="exportDlg" class="xdlg" aria-labelledby="xTitle">
+  <div class="xhead"><h2 id="xTitle">Export</h2><button type="button" class="btn icon-btn sm" id="xClose" aria-label="Close" title="Close (Esc)"><svg class="ic"><use href="#i-close"/></svg></button></div>
+  <div class="xscope" id="xScope"></div>
+  <div class="xopts" id="xOpts" role="radiogroup" aria-label="Format"></div>
+  <label class="chk xfilter" id="xFilter" hidden><input type="checkbox" id="xFilterOn" /><span></span></label>
+  <div class="xfoot"><button type="button" class="btn" id="xCancel">Cancel</button><button type="button" class="btn primary" id="xGo"></button></div>
+</dialog>
+<dialog id="help" aria-label="Foxy Guide">
+  <button id="helpClose" class="btn icon-btn help-x" aria-label="Close guide" title="Close (Esc)"><svg class="ic"><use href="#i-close"/></svg></button>
+  <div class="hbody"><nav class="hnav" id="helpNav" aria-label="Help topics"></nav><div class="hcontent" id="helpBody" tabindex="-1"></div></div>
+  <div class="hfoot"><label class="chk"><input type="checkbox" id="helpHide" /> Don't show this guide when Foxy opens</label><span class="sp"></span><span class="hint2">Reopen any time with the <svg class="ic"><use href="#i-help"/></svg> button or <kbd class="k">?</kbd></span><button id="helpDone" class="btn primary">Got It</button></div>
+</dialog>
+<!-- foxy:scripts -->
+</body>
+</html>

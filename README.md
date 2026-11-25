@@ -33,7 +33,9 @@ Foxy needs a small bridge inside the app. It ships with MetaMask Mobile at `app/
 
 1. Open Foxy and pick your MetaMask Mobile folder. Restart Metro (`yarn watch:clean`) if Foxy says `.js.env` changed.
 2. Start the debug app (`yarn start:ios` or `yarn start:android`). Requests stream into the dashboard.
-3. Fresh install, launch, and press `M` to drop a marker (for example `Onboarding visible`) as things happen. Press `?` for the in-app guide.
+3. For a fresh capture, press **Clear** (in the menu), then fresh install and launch. Press `M` to drop a marker (for example `Onboarding visible`) as things happen. Press `?` for the in-app guide.
+
+A Metro reload, crash or relaunch of the app continues the capture on screen, so markers and request numbers carry on; only Clear starts over.
 
 On setup Foxy also: runs `adb reverse tcp:8098 tcp:8098` for attached Android devices, prints the `FOXY_URL` line a physical iPhone needs, downloads the core monorepo's `CODEOWNERS` for `@metamask/*` team chips when there is no `../core` checkout, and installs a `foxy` agent skill into the checkout (skip with `FOXY_SKIP_SKILL=1`). `node setup.mjs --check` prints the checklist without changing anything.
 
