@@ -2,7 +2,7 @@
 
 See every network request your React Native app makes: which line of code made it, which screen was showing, and which team owns that code.
 
-Foxy was built for MetaMask Mobile, to audit what the app requests on a screen such as Onboarding and decide what could be deferred. It records every `fetch` and `XMLHttpRequest` in a debug build, symbolicates the JS call stack through Metro, and shows the result in a live dashboard. Unlike a proxy such as Charles, it knows *who* made the call, and it installs before the app's engine boots so early requests are not missed.
+Foxy is a developer tool for [MetaMask Mobile](https://github.com/MetaMask/metamask-mobile), built by a MetaMask engineer for the MetaMask Mobile team and for the open source contributors who work on the app alongside us. Use it to audit what the app requests on a screen such as Onboarding and decide what can be deferred, moved or dropped. It records every `fetch` and `XMLHttpRequest` in a debug build, symbolicates the JS call stack through Metro, and shows the result in a live dashboard. Unlike a proxy such as Charles, it knows *who* made the call, and it installs before the app's engine boots so early requests are not missed.
 
 - **Timeline and Endpoints** views, with identical-duplicate detection, failures, waterfall and per-endpoint latency
 - **Code owners** from `CODEOWNERS` (app files and `@metamask/*` packages), plus links to the exact line on GitHub
@@ -29,7 +29,7 @@ npm run dist                                     # builds dist/Foxy-<version>-ar
 
 ## Use it
 
-Foxy needs a small bridge inside the app. It lives in MetaMask Mobile at `app/dev-tools/Foxy` (it is not part of this repo) and turns on when `FOXY="true"` is set in the app's `.js.env`. Foxy sets that for you.
+Foxy needs a small bridge inside the app. It ships with MetaMask Mobile at `app/dev-tools/Foxy` (it is not part of this repo) and turns on when `FOXY="true"` is set in the app's `.js.env`. Foxy sets that for you.
 
 1. Open Foxy and pick your MetaMask Mobile folder. Restart Metro (`yarn watch:clean`) if Foxy says `.js.env` changed.
 2. Start the debug app (`yarn start:ios` or `yarn start:android`). Requests stream into the dashboard.
@@ -69,4 +69,4 @@ npm run pack     # unpacked Foxy.app in dist/ for a quick look
 
 ## License
 
-[MIT](LICENSE) for Foxy's own code. Third-party and MetaMask material is listed in [NOTICE](NOTICE). Foxy is an independent tool and is not affiliated with or endorsed by MetaMask or Consensys.
+[MIT](LICENSE) for Foxy's own code. MetaMask artwork, the wordmark font and third-party software are listed in [NOTICE](NOTICE) and are not covered by it.

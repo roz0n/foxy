@@ -6,9 +6,8 @@ MetaMask artwork
   vendor/foxy-loading.riv, pwa/*.png and build/icon.png are MetaMask artwork
   (the MetaMask fox), (c) ConsenSys Software Inc. All rights reserved. They are
   included to brand Foxy as a MetaMask developer tool. MetaMask and the
-  MetaMask fox are trademarks of ConsenSys Software Inc. Foxy is not affiliated
-  with or endorsed by MetaMask or Consensys. If you fork Foxy for any other
-  purpose, replace these files.
+  MetaMask fox are trademarks of ConsenSys Software Inc. If you fork Foxy for
+  anything other than MetaMask work, replace these files.
 
 Grotzec Condensed Bold
   The dashboard's wordmark and headings use this commercial font. It is NOT
