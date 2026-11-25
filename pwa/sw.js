@@ -12,6 +12,7 @@ const SHELL = [
   '/vendor/rive.js',
   '/vendor/rive.wasm',
   '/vendor/foxy-loading.riv',
+  '/font/grotzec-cond-bold.otf',
 ];
 const LIVE = ['/api/'];
 

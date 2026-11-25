@@ -1,7 +1,7 @@
 {
   "name": "foxy",
   "productName": "Foxy",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "description": "Network request auditor for MetaMask Mobile: every fetch and XHR, the code that made it, the screen it came from and the team that owns it.",
   "private": true,
   "type": "module",

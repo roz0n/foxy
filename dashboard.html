@@ -607,8 +607,9 @@
   .stat .ic { width: 16px; height: 16px; color: var(--color-text-muted); }
   .stat b { font-weight: 600; color: var(--color-text-default); }
   @media (max-width: 860px) { .stat { padding: 0 11px; } }
-  /* the wordmark: the page font, bold, all caps, tight tracking */
-  .wordmark { font-family: var(--font-family, 'Inter', sans-serif); font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: -.012em; line-height: 1; }
+  /* the wordmark: MetaMask's Grotzec Condensed Bold, all caps, tight tracking. Served from app/fonts so there's one copy */
+  @font-face { font-family: 'Grotzec Cond'; src: url('/font/grotzec-cond-bold.otf') format('opentype'); font-weight: 700; font-style: normal; font-display: block; }
+  .wordmark { font-family: 'Grotzec Cond', var(--font-family, 'Inter', sans-serif); font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: -.012em; line-height: 1; }
 
   /* icon-only buttons are true circles */
   button.icon-btn, .mkpop h2 button.icon-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px; padding: 0; border-radius: 50%; }
@@ -995,7 +996,7 @@
   .fwell .fopt + .fopt::before { content: ''; position: absolute; top: 0; left: 34px; right: 10px; height: 1px; background: var(--color-border-muted); pointer-events: none; }
   .fwell .fopt:hover::before, .fwell .fopt:hover + .fopt::before,
   .fwell .fopt:has(.fchk[aria-checked="true"])::before, .fwell .fopt:has(.fchk[aria-checked="true"]) + .fopt::before { opacity: 0; }
-  .mkpop h2 button { font-family: var(--font-family-default); font-weight: 650; letter-spacing: -.014em; } /* the actions beside the title (Clear All, How It Works) use the plain face at a lighter weight */
+  .mkpop h2 button { font-family: var(--font-family-default); font-weight: 650; letter-spacing: -.014em; } /* the title is Grotzec, the actions beside it (Clear All, How It Works) are not: that face is too tight at this size */
   .fwell .fopt:hover { background: var(--fill-2); }
   .fwell .fopt:has(.fchk[aria-checked="true"]) { background: var(--color-primary-muted); }
   .fsec.neg .fwell .fopt:has(.fchk[aria-checked="true"]) { background: var(--color-error-muted); }
@@ -1011,8 +1012,8 @@
   html[data-theme="light"] .card .cl { color: #5b5e68; }
   html[data-theme="light"] .card .cs { color: #6b6e76; }
 
-  /* ============ display type: the headers use the wordmark's face, in sentence case ============ */
-  :root { --font-display: var(--font-family-default); }
+  /* ============ display type: the headers use the wordmark's face (MetaMask's Grotzec Cond Bold), in sentence case ============ */
+  :root { --font-display: 'Grotzec Cond', var(--font-family-default); }
   .hcontent h2, .hcontent h3, .step h4, .mkpop h2 { font-family: var(--font-display); font-weight: 700; }
   .hcontent h2 { font-size: 42px; line-height: 1.04; letter-spacing: -.004em; }
   .hcontent h3 { font-size: 26px; line-height: 1.12; letter-spacing: 0; }
