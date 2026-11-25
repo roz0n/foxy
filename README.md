@@ -10,6 +10,8 @@ Foxy is a developer tool for [MetaMask Mobile](https://github.com/MetaMask/metam
 - **Exports** to JSON, CSV and Markdown, and an **MCP server** so an AI agent can drive and read a capture
 - Debug builds only, opt-in, and header values for credentials are redacted
 
+![The Foxy Endpoints tab on a MetaMask Mobile capture, with call counts, duplicates, call sites, code owners, phases and activity per endpoint](docs/images/endpoints.png)
+
 The full feature reference is in the **[guide](docs/GUIDE.md)**.
 
 ## Install
