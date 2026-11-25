@@ -470,7 +470,7 @@ export function applyAuditEntries(audits, entries) {
 /** A name safe for a file: `Wallet ready!` -> `wallet-ready`. */
 export const fileSlug = (text) => String(text).normalize('NFKD').replace(/[^\x00-\x7f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'phase';
 
-/** Skeleton of the TRAM-4463 recommendation table; the verdict columns are left for a human. */
+/** Skeleton of a recommendation table (keep, defer, move); the verdict columns are left for a human. */
 export function toMarkdown(records, { markers = [], sessionId = '' } = {}) {
   const groups = groupEndpoints(records);
   const esc = (s) => String(s).replace(/\|/g, '\\|');

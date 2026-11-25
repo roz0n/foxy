@@ -1,6 +1,6 @@
 ---
 name: foxy
-description: Gets the Foxy network-request dashboard (TRAM-4463) running and explains what it shows. Use when someone wants to run Foxy, audit which network requests the MetaMask Mobile app makes, find who or which screen made a request, or when Foxy shows no requests, the Android or physical iPhone cannot connect, owner chips are missing, or the dashboard will not start. Covers prerequisite checks, the one-command setup, troubleshooting and the MCP tools.
+description: Gets the Foxy network-request dashboard running and explains what it shows. Use when someone wants to run Foxy, audit which network requests the MetaMask Mobile app makes, find who or which screen made a request, or when Foxy shows no requests, the Android or physical iPhone cannot connect, owner chips are missing, or the dashboard will not start. Covers prerequisite checks, the one-command setup, troubleshooting and the MCP tools.
 maturity: experimental
 ---
 

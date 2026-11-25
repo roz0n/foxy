@@ -65,5 +65,11 @@
       "identity": "-",
       "hardenedRuntime": false
     }
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roz0n/foxy.git"
+  },
+  "homepage": "https://github.com/roz0n/foxy#readme"
 }

@@ -364,19 +364,14 @@ const httpServer = createServer(async (req, res) => {
     if (p === '/' || p === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(await readFile(join(__dirname, 'dashboard.html'), 'utf-8'));
-    } else if (p === '/font/grotzec-cond-bold.otf') {
-      // the wordmark face, read from the app's font folder (not copied) so there is one source of truth; without an app folder the wordmark falls back to the system font
-      const font = join(REPO, 'app', 'fonts', 'GrotzecCond', 'GrotzecCond-Bold.otf');
-      if (!existsSync(font)) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, { 'content-type': 'font/otf', 'cache-control': 'public, max-age=3600' });
-      res.end(await readFile(font));
     } else if (p.startsWith('/vendor/')) {
-      // the Rive runtime and the animated logo, served from disk so the dashboard works offline
+      // the Rive runtime and the optional animated logo, served from disk so the dashboard works offline
       const name = p.slice('/vendor/'.length);
       const type = VENDOR_FILES[name];
-      if (!type) { res.writeHead(404); res.end(); return; }
+      const file = join(__dirname, 'vendor', name);
+      if (!type || !existsSync(file)) { res.writeHead(404); res.end(); return; } // the animated logo is optional, see vendor/README.md
       res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=3600' });
-      res.end(await readFile(join(__dirname, 'vendor', name)));
+      res.end(await readFile(file));
     } else if (p === '/manifest.webmanifest') {
       res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' });
       res.end(MANIFEST);

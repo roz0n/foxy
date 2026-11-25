@@ -1,6 +1,6 @@
 // Foxy service worker. Its only job is to let the installed app open and show its last shell when the Foxy server is not running.
 // Live data (the API) is never cached: a stale request list would be worse than an empty one.
-const CACHE = 'foxy-shell-v2'; // bumped with the final icons, because the shell's files are served cache first
+const CACHE = 'foxy-shell-v3'; // bumped when the icons changed, because the shell's files are served cache first
 const SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -12,7 +12,6 @@ const SHELL = [
   '/vendor/rive.js',
   '/vendor/rive.wasm',
   '/vendor/foxy-loading.riv',
-  '/font/grotzec-cond-bold.otf',
 ];
 const LIVE = ['/api/'];
 

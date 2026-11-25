@@ -66,11 +66,11 @@ test('parseFrame handles Hermes bundle, bytecode, native and JSC formats', () =>
 test('shortFile never leaks the bundle query string', () => {
   assert.equal(shortFile(BUNDLE), 'index.bundle');
   assert.equal(
-    shortFile('/Users/x/metamask-mobile-4463/node_modules/@react-native-community/netinfo/src/internal/state.ts'),
+    shortFile('/Users/x/metamask-mobile/node_modules/@react-native-community/netinfo/src/internal/state.ts'),
     '@react-native-community/netinfo/src/internal/state.ts',
   );
-  assert.equal(shortFile('/Users/x/metamask-mobile-4463/app/core/Engine/Engine.ts'), 'app/core/Engine/Engine.ts');
-  assert.equal(shortFile('/Users/x/metamask-mobile-4463/shim.js'), 'shim.js');
+  assert.equal(shortFile('/Users/x/metamask-mobile/app/core/Engine/Engine.ts'), 'app/core/Engine/Engine.ts');
+  assert.equal(shortFile('/Users/x/metamask-mobile/shim.js'), 'shim.js');
 });
 
 test('cleanMethod strips Hermes ?anon_N_ prefixes', () => {
