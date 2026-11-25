@@ -132,7 +132,7 @@ document.addEventListener('pointerdown', (e) => { const f = $('#filter'); if (do
 function syncSearchField(hits, total) {
   const field = document.querySelector('.field.search'), on = Boolean(filter);
   field.classList.toggle('has-filter', on);
-  field.classList.toggle('no-match', on && hits === 0);
+  field.classList.toggle('no-match', on && total > 0 && hits === 0); // red only when there is something it could have matched
   $('#fcount').hidden = !on;
   if (on) $('#fcount').textContent = `${hits} of ${total}`;
 }

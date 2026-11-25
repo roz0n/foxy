@@ -49,6 +49,7 @@ const HELP = [
       <li><b>Waterfall</b>: where the request sits on the capture and how long it took. Coloured lines are your markers.</li>
       <li><b>Launched from</b>: the screen the app was showing when the request was made, with the navigators above it. <b>on mount</b> means it fired as the screen appeared. Open a row for the screen's source file and the code that started the flow.</li>
     </ul>
+    <div class="callout"><p><b>What does “via” mean?</b> ${teamChip('@MetaMask/core-platform')} is solid: it owns the file that called <code>fetch</code>. ${teamChip('@MetaMask/metamask-assets', true)} is <b>via</b> (dashed, with the <b>↳</b> arrow): it owns the <b>caller</b> behind that call, the hook or component under the Call Site's <b>↳</b>, which started the request by going through someone else's code. Both teams count when you filter, so you find the requests your team's code triggers as well as the ones it makes directly.</p></div>
     <div class="callout"><p>Click a column header to sort by it: once for one direction, again for the other, a third time to go back to the default order. The Timeline keeps its phases while sorted: <b>ID</b> and <b>Time</b> choose which end comes first, any other column orders the requests inside each phase. Drag a column header to reorder it, drag its right edge to resize it, double-click the edge to reset. <b>Reset Columns</b> in the menu restores the defaults.</p></div>
     <p>${goto('filters', '🎛️ Filters & duplicates')} ${goto('markers', '🚩 Markers & phases')}</p>` },
 

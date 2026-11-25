@@ -102,7 +102,7 @@ function buildGroups(list) {
     g.chips = [...g.teams].map((o) => teamChip(o)).join('')
       + [...g.pkgs].map((x) => { const [kind, pkg] = x.split('|'); return kind === 'controller' ? extChip(pkg) : partyChip(pkg); }).join('')
       + [...g.via].map((o) => teamChip(o, true)).join('');
-    g.ownerText = [...g.teams, ...g.via].map(team).join(', ') || [...g.pkgs].map((x) => x.split('|')[1]).join(', ') || 'unowned';
+    g.ownerText = [...[...g.teams].map(team), ...[...g.via].map((o) => `${team(o)} (via)`)].join(', ') || [...g.pkgs].map((x) => x.split('|')[1]).join(', ') || 'unowned';
     return g;
   });
 }

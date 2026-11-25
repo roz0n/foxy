@@ -34,7 +34,10 @@ const PALETTE = ['#8b99ff', '#c66ef5', '#ff7940', '#f0b034', '#b9f302', '#ff7584
 const hash = (s) => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 const teamColor = (t) => PALETTE[hash(team(t)) % PALETTE.length];
 
-const teamChip = (o, via) => `<span class="chip ${via ? 'via' : ''}" data-team="${esc(o)}" style="--c:${teamColor(o)}" title="${esc(o)}${via ? ' (owns the code that started this)' : ''}"><span class="t">${esc(team(o))}</span></span>`;
+// `via` marks the team that owns the CALLER behind the call site (the "↳" line under Call Site) rather than the file that made the request. It is shown
+// as a dashed, arrow-led chip next to the solid one for the call site's own team, and the tooltip says so in words (the guide has the same explanation).
+const VIA_TIP = 'Via: this team owns the caller behind the call site (the \u21b3 line under Call Site), usually the hook or component that started the request through someone else\u2019s code. The solid chip is the team that owns the file that made the request.';
+const teamChip = (o, via) => `<span class="chip ${via ? 'via' : ''}" data-team="${esc(o)}" style="--c:${teamColor(o)}" title="${esc(o)}${via ? `\n${esc(VIA_TIP)}` : ''}"><span class="t">${esc(team(o))}</span></span>`;
 function partyChip(pkg) {
   const m = String(pkg).match(/^(@[^/]+\/)?(.+)$/);
   return `<span class="chip party" data-pkg="${esc(pkg)}" title="Third-party package: ${esc(pkg)}"><span class="t">${m[1] ? `<span class="scope">${esc(m[1])}</span>` : ''}${esc(m[2])}</span></span>`;

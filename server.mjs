@@ -249,7 +249,7 @@ function applySummary(rec) {
   const via = s.ownerRef ? resolveFrameOwners(s.ownerRef, ctx) : null;
   rec.codeOwners = own?.owners ?? null;
   rec.ownerSource = own?.source ?? null; // repo | core | third-party | unknown
-  rec.ownerCodeOwners = via?.owners ?? null;
+  rec.ownerCodeOwners = via?.owners ?? null; // the "via" teams: owners of the caller shown under the call site (callerFrame), not of the call site itself
   rec.callSiteInfo = s.callSiteInfo;
   rec.ownerInfo = s.ownerInfo;
   rec.callerInfo = s.callerInfo;

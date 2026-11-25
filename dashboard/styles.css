@@ -175,8 +175,10 @@ tr.marker td { background: var(--color-warning-muted); color: var(--color-warnin
 .chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 1px 9px 1px 7px; border-radius: var(--r-box); font-size: 11.5px; font-weight: 600; line-height: 1.5; color: var(--c, var(--color-text-alternative)); background: color-mix(in srgb, var(--c, #888) 15%, transparent); border: 1px solid color-mix(in srgb, var(--c, #888) 34%, transparent); }
 .chip::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--c, #888); }
 .chip .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chip.via { background: color-mix(in srgb, var(--c, #888) 11%, transparent); font-weight: 500; }
-.chip.via::after { content: 'via'; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+/* "via": the team that owns the caller behind the call site, not the file that made the request. A ghost chip with a dashed outline and the same
+   arrow as the caller line under Call Site, so it reads as "through this one" next to the solid chip of the call site's own team. */
+.chip.via { background: color-mix(in srgb, var(--c, #888) 6%, transparent); outline: 1px dashed color-mix(in srgb, var(--c, #888) 65%, transparent); outline-offset: -1px; font-weight: 500; }
+.chip.via::before { content: '\21b3'; width: auto; height: auto; border-radius: 0; background: none; font-size: 12px; font-weight: 600; line-height: 1; margin-top: -1px; }
 .chip.party { --c: var(--color-text-alternative); background: var(--color-background-section); border: 1px solid var(--color-border-muted); font-weight: 500; }
 .chip.party::before { content: '📦'; width: auto; height: auto; background: none; font-size: 10px; }
 .chip.party .scope { color: var(--color-text-muted); }

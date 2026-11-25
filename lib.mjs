@@ -492,7 +492,7 @@ export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt =
     exportedBy: environment ? { ...environment } : undefined,
     instructions: 'A human audited the network requests the MetaMask Mobile app makes during one phase of its run. Each endpoint carries the verdict they gave it for THIS phase only: '
       + VERDICTS.map((x) => `"${x.id}" = ${x.tip}`).join('; ')
-      + '. A null verdict means it has not been judged yet, so assume nothing about it. For "defer", "move" and "drop" endpoints, use callSites (function, file, line) to find the code that makes the request and propose the change, quoting the reason. Leave "keep" endpoints alone.',
+      + '. A null verdict means it has not been judged yet, so assume nothing about it. For "defer", "move" and "drop" endpoints, use callSites (function, file, line) to find the code that makes the request and propose the change, quoting the reason. Leave "keep" endpoints alone. Owners: codeOwners are the teams that own the file that makes the request; ownersViaCaller are teams that own the caller behind it (the code that started the request by going through someone else\'s), so a change to the trigger may belong to them.',
     phase: { label: phase.label, startMs: Math.round(phase.startMs), endMs: phase.endMs == null ? null : Math.round(phase.endMs), open: phase.open, requests: phase.requests },
     summary: { endpoints: endpoints.length, judged: endpoints.length - unjudged, keep: count('keep'), defer: count('defer'), move: count('move'), drop: count('drop'), unjudged },
     endpoints,
