@@ -75,6 +75,7 @@ function buildGroups(list) {
   return [...groups.values()].map((g) => {
     g.list.sort((a, b) => a.relMs - b.relMs);
     g.n = g.list.length; g.first = g.list[0].relMs; g.last = g.list[g.n - 1].relMs;
+    g.firstAt = Math.min(...g.list.map((r) => r.ts)); g.lastAt = Math.max(...g.list.map((r) => r.ts));
     g.st = {}; g.sites = new Map(); g.byQuery = new Map(); g.dupeIds = new Set();
     g.teams = new Set(); g.pkgs = new Set(); g.via = new Set();
     g.wastedMs = 0; g.wastedBytes = 0; g.bytesTotal = 0; g.failed = 0;
@@ -89,8 +90,9 @@ function buildGroups(list) {
       if (r.callSiteInfo) { const t = fnTitle(r.callSiteInfo); const e = g.sites.get(t) || { info: r.callSiteInfo, n: 0, owners: r.codeOwners, via: r.ownerCodeOwners }; e.n++; g.sites.set(t, e); }
       (r.codeOwners || []).forEach((o) => g.teams.add(o));
       if (!(r.codeOwners || []).length && r.callSiteInfo?.pkg) g.pkgs.add(r.callSiteInfo.kind + '|' + r.callSiteInfo.pkg);
-      if (!(r.codeOwners || []).length) (r.ownerCodeOwners || []).forEach((o) => g.via.add(o));
+      (r.ownerCodeOwners || []).forEach((o) => g.via.add(o));
     }
+    g.teams.forEach((o) => g.via.delete(o));
     g.dupes = g.dupeIds.size;
     g.avg = durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : null;
     g.p95 = pct(durs, 0.95); g.max = durs.length ? Math.max(...durs) : null;
@@ -100,7 +102,7 @@ function buildGroups(list) {
     g.chips = [...g.teams].map((o) => teamChip(o)).join('')
       + [...g.pkgs].map((x) => { const [kind, pkg] = x.split('|'); return kind === 'controller' ? extChip(pkg) : partyChip(pkg); }).join('')
       + [...g.via].map((o) => teamChip(o, true)).join('');
-    g.ownerText = [...g.teams].map(team).join(', ') || [...g.pkgs].map((x) => x.split('|')[1]).join(', ') || 'unowned';
+    g.ownerText = [...g.teams, ...g.via].map(team).join(', ') || [...g.pkgs].map((x) => x.split('|')[1]).join(', ') || 'unowned';
     return g;
   });
 }
@@ -113,15 +115,16 @@ function endpointLabel(k) {
 }
 // What the endpoint is and how it behaves first, then who calls it, then where in the flow it appears.
 const ENDPOINT_COLS = [
-  { id: 'endpoint', label: 'Endpoint', w: 0.22, sort: (g) => g.k, cell: (g) => td(endpointLabel(g.k), { cls: 'mono', title: g.k }) },
+  { id: 'endpoint', label: 'Endpoint', w: 0.2, sort: (g) => g.k, cell: (g) => td(endpointLabel(g.k), { cls: 'mono', title: g.k }) },
   { id: 'statuses', label: 'Statuses', w: 0.085, sort: (g) => g.failed, sortFirst: 'desc', cell: (g) => td(statusPills(g.st)) },
   { id: 'calls', label: 'Calls', w: 0.045, fit: { min: '00', max: '000000' }, sort: (g) => g.n, sortFirst: 'desc', cell: (g) => td(g.n, { cls: 'num' }) },
   { id: 'dupes', label: 'Identical Dupes', w: 0.1, sort: (g) => g.dupes, sortFirst: 'desc', cell: (g) => td(g.dupes ? `<span class="dupe-pill l${g.dupes > 5 ? 3 : g.dupes > 2 ? 2 : 1}" title="${g.dupes} repeat${g.dupes > 1 ? 's' : ''} of an identical request (${g.wastedMs} ms, ${bytes(g.wastedBytes) || '0 B'} redundant)">+${g.dupes}</span>` : '<span class="dim">—</span>') },
   { id: 'avg', label: 'Avg Duration', w: 0.055, fit: { min: '000 ms', max: '000.0 s' }, sort: (g) => g.avg, sortFirst: 'desc', cell: (g) => td(fmtMs(g.avg), { cls: 'alt num', title: g.avg == null ? '' : `p95 ${fmtMs(g.p95)}, max ${fmtMs(g.max)}` }) },
   { id: 'sites', label: 'Call Sites', w: 0.14, sort: (g) => { const e = [...g.sites.values()][0]; return e ? `${e.info.method} ${e.info.file}` : ''; }, cell: (g) => td(`${[...g.sites.values()].slice(0, 1).map((e) => fnCell(e.info, false, { bar: false })).join('')}${g.sites.size > 1 ? `<span class="dim">+${g.sites.size - 1} more call sites</span>` : ''}`, { title: [...g.sites.values()].map((e) => fnTitle(e.info)).join('\n') }) },
   { id: 'owners', label: 'Code Owners', w: 0.13, sort: (g) => g.ownerText, cell: (g) => td(`<div class="chips">${g.chips || noneChip('—')}</div>`) },
-  { id: 'phase', label: 'Phase', w: 0.11, sort: (g) => phaseByKey.get(g.list[0].key)?.start, cell: (g) => { const p = phaseByKey.get(g.list[0].key); return td(p ? `<div class="chips">${phaseChip(p)}</div>` : '<span class="dim">—</span>', { title: p ? `First called during "${p.label}"` : 'Add markers to see which phase each endpoint first appears in' }); } },
-  { id: 'first', label: 'First', w: 0.05, fit: TIME_FIT, sort: (g) => g.first, cell: (g) => td(tf(g.first), { cls: 'alt num', title: `first call at ${clock(g.list[0].ts)}` }) },
+  { id: 'phase', label: 'Phase', w: 0.1, sort: (g) => phaseByKey.get(g.list[0].key)?.start, cell: (g) => { const p = phaseByKey.get(g.list[0].key); return td(p ? `<div class="chips">${phaseChip(p)}</div>` : '<span class="dim">—</span>', { title: p ? `First called during "${p.label}"` : 'Add markers to see which phase each endpoint first appears in' }); } },
+  { id: 'at', label: 'First Call At', w: 0.06, fit: CLOCK_FIT, sort: (g) => g.firstAt, cell: (g) => td(clock(g.firstAt), { cls: 'alt num', title: g.n > 1 ? `${fullTime(g.firstAt)}; last call ${fullTime(g.lastAt)}` : fullTime(g.firstAt) }) },
+  { id: 'first', label: 'First', w: 0.05, fit: TIME_FIT, sort: (g) => g.first, cell: (g) => td(tf(g.first), { cls: 'alt num', title: `+${tf(g.first)} into the capture` }) },
   { id: 'activity', label: 'Activity', w: 0.12, cell: (g) => td(lane(g, false), { title: 'Every call on the capture timeline (ringed = repeat of an identical request)' }) },
 ];
 

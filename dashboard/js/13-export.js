@@ -11,22 +11,23 @@ function csvCell(x) {
 }
 const toCsv = (head, rows) => `\ufeff${[head, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n')}\r\n`; // BOM: Excel reads the UTF-8
 const ownersText = (r) => (r.codeOwners || []).map(team).join(' ') || r.callSiteInfo?.pkg || '';
+const viaText = (r) => (r.ownerCodeOwners || []).filter((o) => !(r.codeOwners || []).includes(o)).map(team).join(' ');
 function requestsCsv(list = [...reqs.values()].filter(match)) {
-  const head = ['ID', 'Time (s)', 'Clock', 'Phase', 'Method', 'Host', 'Path', 'Query', 'Status', 'Error', 'Duration (ms)', 'Size (bytes)', 'Identical dupe', 'Code owners', 'Via', 'Screen', 'Call site', 'Started from'];
+  const head = ['ID', 'Time (s)', 'Started at', 'Phase', 'Method', 'Host', 'Path', 'Query', 'Status', 'Error', 'Duration (ms)', 'Finished at', 'Size (bytes)', 'Identical dupe', 'Code owners', 'Via caller', 'Screen', 'Call site', 'Started from'];
   return toCsv(head, [...list].sort((a, b) => a.relMs - b.relMs).map((r) => [
-    r.id, Number(sec(r.relMs)), clock(r.ts), phaseByKey.get(r.key)?.label || '', r.method, r.host, r.path, r.query || '',
-    r.status ?? '', r.error || '', r.durationMs == null ? null : Math.round(r.durationMs), r.sizeBytes ?? null, dupeCounts.get(reqKey(r)) > 1,
-    ownersText(r), (r.ownerCodeOwners || []).map(team).join(' '), r.view ? (r.view.ready ? r.view.route : 'App start-up') : '', siteText(r.callSiteInfo), siteText(r.ownerInfo),
+    r.id, Number(sec(r.relMs)), isoLocal(r.ts), phaseByKey.get(r.key)?.label || '', r.method, r.host, r.path, r.query || '',
+    r.status ?? '', r.error || '', r.durationMs == null ? null : Math.round(r.durationMs), r.durationMs == null ? '' : isoLocal(r.ts + r.durationMs), r.sizeBytes ?? null, dupeCounts.get(reqKey(r)) > 1,
+    ownersText(r), viaText(r), r.view ? (r.view.ready ? r.view.route : 'App start-up') : '', siteText(r.callSiteInfo), siteText(r.ownerInfo),
   ]));
 }
 function endpointsCsv(list = [...reqs.values()].filter(match)) {
-  const head = ['Phase', 'Endpoint', 'Method', 'Host', 'Path', 'Calls', 'Identical dupes', 'Failed', 'Statuses', 'Avg (ms)', 'P95 (ms)', 'Bytes', 'First call (s)', 'Code owners', 'Call site', 'Verdict', 'Reason'];
+  const head = ['Phase', 'Endpoint', 'Method', 'Host', 'Path', 'Calls', 'Identical dupes', 'Failed', 'Statuses', 'Avg (ms)', 'P95 (ms)', 'Bytes', 'First call (s)', 'First call at', 'Last call at', 'Code owners', 'Call site', 'Verdict', 'Reason'];
   const groups = buildGroups(list).sort((a, b) => a.first - b.first);
   return toCsv(head, groups.map((g) => {
     const v = auditOf(phaseOfGroup(g), g.k), site = [...g.sites.values()][0]?.info;
     return [
       phaseOfGroup(g)?.label || '', g.k, g.method, g.host, g.path, g.n, g.dupes, g.failed, Object.entries(g.st).map(([s, n]) => `${s === '…' ? 'pending' : s}x${n}`).join(' '),
-      g.avg, g.p95 == null ? null : Math.round(g.p95), g.bytesTotal, Number(sec(g.first)), g.ownerText, siteText(site),
+      g.avg, g.p95 == null ? null : Math.round(g.p95), g.bytesTotal, Number(sec(g.first)), isoLocal(g.firstAt), isoLocal(g.lastAt), g.ownerText, siteText(site),
       VERDICTS.find((x) => x.id === v.v)?.label || '', v.note || '',
     ];
   }));
@@ -34,7 +35,7 @@ function endpointsCsv(list = [...reqs.values()].filter(match)) {
 
 // ---- Export dialog: every download button opens it. Pick a format, then Export. ----
 const xdlg = $('#exportDlg');
-let xScope = null, xFmt = '';
+let xScope = null, xFmt = '', xBusy = false;
 const phaseReqs = (ph) => [...reqs.values()].filter((r) => phaseByKey.get(r.key)?.id === ph.id);
 /** The formats on offer for a scope. `run` does the work and returns the label to flash. */
 function exportFormats(scope) {
@@ -42,25 +43,39 @@ function exportFormats(scope) {
   const slug = ph ? slugOf(ph.label) : 'capture', stamp = fileStamp();
   const list = () => (ph ? phaseReqs(ph) : $('#xFilterOn').checked ? [...reqs.values()].filter(match) : [...reqs.values()]);
   const save = (text, name, type) => { downloadText(text, name, type); return 'Saved'; };
+  // Every CSV and markdown export opens by saying it is from Foxy, when, and from which checkout and app build (the server knows those).
+  const scopeLabel = ph ? `Phase "${ph.label}"` : $('#xFilterOn').checked ? 'Filtered requests' : 'Whole capture';
+  const facts = async (format) => {
+    const n = list().length;
+    try { const r = await fetch('/api/export/header?' + new URLSearchParams({ format, scope: scopeLabel, shown: n, total: ph ? n : reqs.size })); return r.ok ? await r.text() : ''; } catch { return ''; }
+  };
+  const csvWith = async (csv) => { const h = await facts('csv'); return csv.replace(/^\ufeff/, (bom) => bom + h); };
   const json = {
     id: 'json', title: 'JSON, full detail', tag: '.json', verb: 'Download JSON',
     desc: ph ? `Every request with headers, bodies and the call chain, plus the phase totals${ph.end === Infinity ? ' (still capturing: what has arrived so far)' : ''}.` : 'The whole session: every request in full, the markers and the phases. Ignores filters.',
     run: async () => { await downloadFromServer(ph ? '/api/export/phase?marker=' + encodeURIComponent(ph.id) : '/api/export/capture', 'foxy-export.json'); return 'Saved'; },
   };
-  const csvReq = { id: 'csv-req', title: 'CSV, one row per request', tag: '.csv', verb: 'Download CSV', desc: 'Time, phase, method, host, path, status, duration, size, owners and call site. Opens in a spreadsheet.', run: () => save(requestsCsv(list()), `foxy-${slug}-requests-${stamp}.csv`, 'text/csv;charset=utf-8') };
-  const csvEp = { id: 'csv-ep', title: 'CSV, one row per endpoint', tag: '.csv', verb: 'Download CSV', desc: 'Calls, dupes, failures, timings, owners and call site, with the verdict and reason you gave each one.', run: () => save(endpointsCsv(list()), `foxy-${slug}-endpoints-${stamp}.csv`, 'text/csv;charset=utf-8') };
-  const md = { id: 'md', title: 'Markdown table, copy', tag: 'copies', verb: 'Copy Markdown', desc: 'A table to paste wherever you are writing this up.', run: async () => { await copyText(ph ? auditMarkdown(ph) : endpointsMarkdown(list())); return 'Copied!'; } };
-  const mdText = () => (ph ? auditMarkdown(ph) : endpointsMarkdown(list()));
-  const mdFile = { id: 'md-file', title: 'Markdown file', tag: '.md', verb: 'Download Markdown', desc: 'The same table, saved as a file you can attach to a PR or a ticket.', run: () => save(mdText(), `foxy-${slug}-${ph ? 'audit' : 'endpoints'}-${stamp}.md`, 'text/markdown;charset=utf-8') };
+  const csvReq = { id: 'csv-req', title: 'CSV, one row per request', tag: '.csv', verb: 'Download CSV', desc: 'Time, phase, method, host, path, status, duration, size, owners and call site. Opens in a spreadsheet.', run: async () => save(await csvWith(requestsCsv(list())), `foxy-${slug}-requests-${stamp}.csv`, 'text/csv;charset=utf-8') };
+  const csvEp = { id: 'csv-ep', title: 'CSV, one row per endpoint', tag: '.csv', verb: 'Download CSV', desc: 'Calls, dupes, failures, timings, owners and call site, with the verdict and reason you gave each one.', run: async () => save(await csvWith(endpointsCsv(list())), `foxy-${slug}-endpoints-${stamp}.csv`, 'text/csv;charset=utf-8') };
+  const mdText = async () => (await facts('md')) + (ph ? auditMarkdown(ph) : endpointsMarkdown(list()));
+  const md = { id: 'md', title: 'Markdown table, copy', tag: 'copies', verb: 'Copy Markdown', desc: 'A table to paste wherever you are writing this up.', keepOpen: true, run: async () => { await copyText(await mdText()); return 'Copied!'; } };
+  const mdFile = { id: 'md-file', title: 'Markdown file', tag: '.md', verb: 'Download Markdown', desc: 'The same table, saved as a file you can attach to a PR or a ticket.', run: async () => save(await mdText(), `foxy-${slug}-${ph ? 'audit' : 'endpoints'}-${stamp}.md`, 'text/markdown;charset=utf-8') };
   if (!ph) return [json, csvReq, csvEp, md, mdFile];
   const agent = { id: 'agent', title: 'JSON for an agent', tag: '.json', verb: 'Download JSON', desc: 'Verdicts, reasons and call sites, with instructions an AI agent can act on. Agents can also read it themselves (audit_get).', run: async () => { await flushAudits().catch(() => {}); await downloadFromServer('/api/audit/export?phase=' + encodeURIComponent(ph.id), `foxy-audit-${slug}.json`); return 'Saved'; } };
   return [json, csvReq, csvEp, md, mdFile, agent];
 }
+/** Builds the option list. Only openExport calls it: picking an option never rebuilds the list, which is what made the dialog flicker. */
 function xRender() {
   const fmts = exportFormats(xScope);
   if (!fmts.some((f) => f.id === xFmt)) xFmt = fmts[0].id;
   $('#xOpts').innerHTML = fmts.map((f) => `<label class="xopt"><input type="radio" name="xfmt" value="${f.id}" ${f.id === xFmt ? 'checked' : ''} /><span class="xt">${esc(f.title)}</span><span class="xtag">${esc(f.tag)}</span><span class="xd">${esc(f.desc)}</span></label>`).join('');
-  const go = $('#xGo'); go.textContent = fmts.find((f) => f.id === xFmt).verb;
+  xSync();
+}
+/** Points the Export button at the chosen format, in place. */
+function xSync() {
+  if (xBusy) return;
+  const f = exportFormats(xScope).find((x) => x.id === xFmt);
+  if (f) $('#xGo').textContent = f.verb;
 }
 function openExport(scope) {
   const ph = scope.kind === 'phase' ? phases.find((p) => p.id === scope.id) : null;
@@ -72,17 +87,21 @@ function openExport(scope) {
   const narrowed = !ph && [...reqs.values()].filter(match).length !== reqs.size;
   $('#xFilter').hidden = !narrowed; $('#xFilterOn').checked = false;
   if (narrowed) $('#xFilter span').textContent = `Only what my filters show (${[...reqs.values()].filter(match).length} of ${reqs.size}). Applies to CSV and Markdown; the full JSON always has everything.`;
-  const go = $('#xGo'); go.disabled = false; go.classList.remove('ok');
+  const go = $('#xGo'); go.disabled = false; go.classList.remove('ok'); xBusy = false;
   xRender();
   if (!xdlg.open) xdlg.showModal();
-  xdlg.querySelector('input[name="xfmt"]:checked')?.focus();
+  xdlg.querySelector('input[name="xfmt"]:checked')?.focus({ preventScroll: true });
 }
-$('#xOpts').addEventListener('change', (e) => { xFmt = e.target.value; localStorage.setItem(`foxy.export.fmt.${xScope.kind}`, xFmt); xRender(); xdlg.querySelector('input[name="xfmt"]:checked')?.focus(); });
+$('#xOpts').addEventListener('change', (e) => { xFmt = e.target.value; localStorage.setItem(`foxy.export.fmt.${xScope.kind}`, xFmt); xSync(); });
 $('#xGo').onclick = async () => {
   const go = $('#xGo'), fmt = exportFormats(xScope).find((f) => f.id === xFmt); if (!fmt) return;
-  go.disabled = true;
-  try { go.textContent = await fmt.run(); go.classList.add('ok'); setTimeout(() => { if (xdlg.open) xdlg.close(); }, 650); }
-  catch { go.textContent = 'Failed'; setTimeout(() => { go.disabled = false; xRender(); }, 1400); }
+  const settle = () => { xBusy = false; go.disabled = false; go.classList.remove('ok'); xSync(); };
+  xBusy = true; go.disabled = true;
+  try {
+    go.textContent = await fmt.run(); go.classList.add('ok');
+    // A download is done once it is saved, so the dialog goes. A copy leaves it open to copy again or pick something else.
+    setTimeout(() => { if (fmt.keepOpen) settle(); else { if (xdlg.open) xdlg.close(); settle(); } }, fmt.keepOpen ? 1400 : 650);
+  } catch { go.textContent = 'Failed'; setTimeout(settle, 1400); }
 };
 $('#xCancel').onclick = $('#xClose').onclick = () => xdlg.close();
 xdlg.addEventListener('click', (e) => { if (e.target === xdlg) xdlg.close(); }); // the backdrop

@@ -70,6 +70,10 @@ $('#phasePill').addEventListener('click', (e) => {
 });
 $('#stripin').addEventListener('click', (e) => {
   const flag = e.target.closest('b[data-pid]');
+  if (flag && tab === 'endpoints') { // in Endpoints a flag focuses that phase (click again to show every phase), and stays on Endpoints
+    ui.phase = ui.phase === flag.dataset.pid ? null : flag.dataset.pid; render();
+    return;
+  }
   if (flag) { // jump to the phase header in the Timeline
     navigate(() => { tab = 'timeline'; collapsed.delete(flag.dataset.pid); render(); });
     const row = timelineV.reveal(`phase:${flag.dataset.pid}`, 'start');

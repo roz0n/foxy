@@ -79,6 +79,16 @@ function axisLabels(W = $('#stripin')?.clientWidth || 600) {
   [25, 50, 75].forEach(tick);
   return out.map((o) => o.html).join('');
 }
+/** Local ISO 8601 with milliseconds and the UTC offset (`2026-11-25T14:41:05.123-05:00`), the form the exports use. */
+function isoLocal(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '';
+  const d = new Date(ms), p = (n, l = 2) => String(n).padStart(l, '0'), off = -d.getTimezoneOffset(), a = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}${off >= 0 ? '+' : '-'}${p(Math.floor(a / 60))}:${p(a % 60)}`;
+}
+/** A moment spelled out for a tooltip: `Wed, Nov 25, 2026, 14:41:05.123 EST`. */
+const fullTime = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3, hour12: false, timeZoneName: 'short' });
+const dayOf = (ms) => new Date(ms).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+const CLOCK_FIT = { min: '00:00:00.000', max: '00:00:00.000' }; // a wall-clock time column
 const TIME_FIT = { min: () => tf(0), max: () => tf(99 * 60000 + 59900) }; // auto-fit bounds for time columns
 /** A length of time (gaps, phase lengths): short ones stay in seconds with 2 decimals. */
 const dur = (ms) => (timeMode === 'sec' || ms < 60000 ? `${(ms / 1000).toFixed(2)}s` : tf(ms));

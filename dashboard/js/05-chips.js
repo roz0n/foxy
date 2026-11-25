@@ -43,7 +43,7 @@ const extChip = (pkg) => `<span class="chip mm" data-pkg="${esc(pkg)}" title="${
 const warnChip = (text, title) => `<span class="chip warn" title="${esc(title)}"><span class="t">${esc(text)}</span></span>`;
 const noneChip = (text, title) => `<span class="chip none" title="${esc(title || '')}"><span class="t">${esc(text)}</span></span>`;
 
-/** Chips for a frame: teams, else the package it came from (+ teams of the code that started it). `max` caps the count with a +N chip. */
+/** Chips for a frame: its teams, else the package it came from, then the teams of the caller behind it (the "↳" frame) that are not already shown. `max` caps the count with a +N chip. */
 function ownerChips(info, owners, viaOwners, max) {
   const out = [];
   const add = (html, name) => out.push({ html, name });
@@ -53,14 +53,16 @@ function ownerChips(info, owners, viaOwners, max) {
     else if (info.kind === 'controller') add(extChip(info.pkg), info.pkg);
     else if (info.kind === 'app' || info.kind === 'project') add(warnChip('unowned', `${info.file} has no CODEOWNERS entry`), 'unowned');
     else if (info.unsymbolicated) add(noneChip('unsymbolicated', 'Metro could not symbolicate this frame'), 'unsymbolicated');
-    (viaOwners || []).forEach((o) => add(teamChip(o, true), `${team(o)} (via)`));
   }
+  (viaOwners || []).filter((o) => !(owners || []).includes(o)).forEach((o) => add(teamChip(o, true), `${team(o)} (via caller)`));
   if (max && out.length > max) {
     const rest = out.slice(max);
     return out.slice(0, max).map((x) => x.html).join('') + noneChip(`+${rest.length}`, rest.map((x) => x.name).join(', '));
   }
   return out.map((x) => x.html).join('');
 }
+/** Every team behind a request: the call site's, then the caller's that differ. */
+const effectiveTeams = (r) => [...(r.codeOwners || []), ...(r.ownerCodeOwners || []).filter((o) => !(r.codeOwners || []).includes(o))];
 const rowChips = (r) => `<div class="chips">${ownerChips(r.callSiteInfo, r.codeOwners, r.ownerCodeOwners, 3) || noneChip('—')}</div>`;
 
 /** GitHub status from the server: { repo, ref }. Call-site links need it, so they simply stay plain text until it loads. */

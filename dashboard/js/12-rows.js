@@ -187,21 +187,21 @@ function auditMarkdown(ph) {
   const when = `+${sec(ph.start)}s to ${ph.end === Infinity ? 'now (still collecting)' : `+${sec(ph.end)}s`}`;
   const rows = groups.map((g) => {
     const v = auditOf(ph, g.k), site = [...g.sites.values()][0]?.info;
-    return `| ${mdCell(g.k)} | ${mdCell(VERDICTS.find((x) => x.id === v.v)?.label || 'No verdict')} | ${mdCell(v.note || '')} | ${g.n} | ${g.dupes} | ${mdCell(Object.entries(g.st).map(([s2, c]) => `${s2}×${c}`).join(' '))} | ${g.avg ?? ''} | ${mdCell(g.ownerText)} | ${mdCell(siteText(site))} | ${sec(g.first)} |`;
+    return `| ${mdCell(g.k)} | ${mdCell(VERDICTS.find((x) => x.id === v.v)?.label || 'No verdict')} | ${mdCell(v.note || '')} | ${g.n} | ${g.dupes} | ${mdCell(Object.entries(g.st).map(([s2, c]) => `${s2}×${c}`).join(' '))} | ${g.avg ?? ''} | ${mdCell(g.ownerText)} | ${mdCell(siteText(site))} | ${sec(g.first)} | ${clock(g.firstAt)} |`;
   });
-  return `## Audit: ${ph.label}\n\nPhase window ${when}. ${ph.n} request${ph.n === 1 ? '' : 's'} to ${groups.length} endpoint${groups.length === 1 ? '' : 's'}.\n\nKeep ${n.keep} · Defer ${n.defer} · Move ${n.move} · Drop ${n.drop} · No verdict ${n.none}\n\n| Endpoint | Verdict | Reason | Calls | Identical dupes | Statuses | Avg ms | Code owner | Call site | First call (+s) |\n|---|---|---|---|---|---|---|---|---|---|\n${rows.join('\n')}\n`;
+  return `## Audit: ${ph.label}\n\nPhase window ${when}. ${ph.n} request${ph.n === 1 ? '' : 's'} to ${groups.length} endpoint${groups.length === 1 ? '' : 's'}.\n\nKeep ${n.keep} · Defer ${n.defer} · Move ${n.move} · Drop ${n.drop} · No verdict ${n.none}\n\n| Endpoint | Verdict | Reason | Calls | Identical dupes | Statuses | Avg ms | Code owner | Call site | First call (+s) | First call at |\n|---|---|---|---|---|---|---|---|---|---|---|\n${rows.join('\n')}\n`;
 }
 /** Client-side markdown for the Endpoints tab, including verdicts and notes. */
 function endpointsMarkdown(list = [...reqs.values()].filter(match)) {
   const c = (x) => String(x ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
   const groups = buildGroups(list).sort((a, b) => a.first - b.first);
-  const head = '| First +s | Phase | Endpoint | Code owner | Calls | Identical dupes | Statuses | Avg ms | Call site | Verdict | Notes |\n|---|---|---|---|---|---|---|---|---|---|---|';
+  const head = '| First +s | First call at | Phase | Endpoint | Code owner | Calls | Identical dupes | Statuses | Avg ms | Call site | Verdict | Notes |\n|---|---|---|---|---|---|---|---|---|---|---|---|';
   const phaseTable = phases.length
     ? `Phases (each marker starts a phase that lasts until the next one):\n\n| Phase | Starts (+s) | Requests | New endpoints | Identical dupes | Failed |\n|---|---|---|---|---|---|\n${phases.map((p) => `| ${c(p.label)} | ${sec(p.start)} | ${p.n} | ${p.newEps} | ${p.dupes} | ${p.failed} |`).join('\n')}\n\n`
     : '';
   const rows = groups.map((g) => {
     const site = [...g.sites.values()][0]?.info, v = auditOf(phaseOfGroup(g), g.k);
-    return `| ${sec(g.first)} | ${c(phaseByKey.get(g.list[0].key)?.label || '')} | ${c(g.k)} | ${c(g.ownerText)} | ${g.n} | ${g.dupes} | ${c(Object.entries(g.st).map(([s, n]) => `${s}×${n}`).join(' '))} | ${g.avg ?? ''} | ${site ? c(`${site.method}() ${site.file}:${site.line}`) : ''} | ${c(VERDICTS.find((x) => x.id === v.v)?.label || '')} | ${c(v.note || '')} |`;
+    return `| ${sec(g.first)} | ${clock(g.firstAt)} | ${c(phaseByKey.get(g.list[0].key)?.label || '')} | ${c(g.k)} | ${c(g.ownerText)} | ${g.n} | ${g.dupes} | ${c(Object.entries(g.st).map(([s, n]) => `${s}×${n}`).join(' '))} | ${g.avg ?? ''} | ${site ? c(`${site.method}() ${site.file}:${site.line}`) : ''} | ${c(VERDICTS.find((x) => x.id === v.v)?.label || '')} | ${c(v.note || '')} |`;
   });
   return `${phaseTable}${head}\n${rows.join('\n')}\n`;
 }

@@ -138,10 +138,12 @@ export function summarizeInitiator(frames) {
   const real = frames.filter((f) => classifyFrame(f) !== 'infra');
   const callSite = real[0] || null;
   // Nearest app/@metamask frame that is not the call site itself (= who started it).
-  const owner =
-    real.slice(1).find((f) => ['app', 'controller'].includes(classifyFrame(f))) || null;
-  const symbolicated = real.length > 0 && real.every((f) => !isBundleUrl(f.file));
   const caller = callerFrame(real);
+  // "Started from" is the caller the Call Site column shows (the hook behind a controller call); when the stack has no such caller, the nearest
+  // app/@metamask frame after the call site, as before.
+  const owner =
+    caller || real.slice(1).find((f) => ['app', 'controller'].includes(classifyFrame(f))) || null;
+  const symbolicated = real.length > 0 && real.every((f) => !isBundleUrl(f.file));
   return {
     callerInfo: caller ? frameInfo(caller) : null,
     callSite: callSite ? fmt(callSite) : null,
@@ -181,11 +183,52 @@ export function slim(record) {
 /** `@MetaMask/mobile-platform` -> `mobile-platform` */
 export const teamName = (o) => String(o).replace(/^@MetaMask\//i, '');
 
-/** Owners to show for a request: the call-site file's, else the nearest app/@metamask frame's. */
+/** Owners to show for a request: the call-site file's, plus the team behind the caller when it is a different one. `via` is true when only the caller's owners are known. */
 export function effectiveOwners(r) {
-  if (r.codeOwners && r.codeOwners.length) return { owners: r.codeOwners, via: false };
-  if (r.ownerCodeOwners && r.ownerCodeOwners.length) return { owners: r.ownerCodeOwners, via: true };
-  return { owners: [], via: false };
+  const own = r.codeOwners || [], via = (r.ownerCodeOwners || []).filter((o) => !own.includes(o));
+  return { owners: [...own, ...via], via: own.length === 0 && via.length > 0 };
+}
+
+/** A time as local ISO 8601 with the UTC offset and milliseconds (`2026-11-25T14:41:05.123-05:00`), for exports a person reads in their own time zone. */
+export function isoLocal(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '';
+  const d = new Date(ms), p = (n, l = 2) => String(n).padStart(l, '0');
+  const off = -d.getTimezoneOffset(), a = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}${off >= 0 ? '+' : '-'}${p(Math.floor(a / 60))}:${p(a % 60)}`;
+}
+
+/**
+ * What an export says about itself, as [label, value] pairs: who made it, when, from which checkout and app build. `env` is the server's
+ * exportEnvironment(). Every export (JSON, CSV, markdown, and the files an agent reads) carries these, so a file found months later still
+ * says where it came from.
+ */
+export function exportFacts(env, { scope = 'Whole capture', shown, total } = {}) {
+  if (!env) return [];
+  const facts = [];
+  const add = (k, v) => { if (v != null && v !== '') facts.push([k, String(v)]); };
+  const app = env.app || {};
+  add('Exported', `${env.exportedAtLocal} (${env.timeZone})`);
+  add('Scope', total == null ? scope : `${scope} · ${shown ?? total}${shown != null && shown !== total ? ` of ${total}` : ''} request${(shown ?? total) === 1 ? '' : 's'}`);
+  add('Capture started', env.capture?.startedAtLocal);
+  add('App', [app.platform && `${app.platform}${app.osVersion ? ` ${app.osVersion}` : ''}`, app.model, app.version && `MetaMask Mobile ${app.version}${app.build ? ` (${app.build})` : ''}`].filter(Boolean).join(' · '));
+  add('App environment', [app.environment, app.buildType && `build type ${app.buildType}`].filter(Boolean).join(' · '));
+  const c = env.checkout || {};
+  add('Source checkout', c.branch || c.commit ? `${c.branch || 'detached HEAD'}${c.commit ? ` @ ${c.commit}` : ''}${c.dirty ? ' (uncommitted changes)' : ''}` : '');
+  add('GitHub', c.github);
+  add('Metro', env.metro);
+  add('Machine', env.machine);
+  return facts;
+}
+const FOXY_INTRO = (env) => `Exported from Foxy ${env.version || ''}`.trim() + ': the network-request auditor for MetaMask Mobile (' + (env.homepage || 'https://github.com/roz0n/foxy') + ').';
+/** The export facts as a markdown block quote. Empty when there is no environment. */
+export function factsMarkdown(env, opts) {
+  if (!env) return '';
+  return [`> ${FOXY_INTRO(env)}`, '>', ...exportFacts(env, opts).map(([k, v]) => `> - **${k}:** ${v}`)].join('\n') + '\n\n';
+}
+/** The export facts as `# ` comment lines at the top of a CSV. No commas, so a spreadsheet keeps each line in one cell. */
+export function factsCsv(env, opts) {
+  if (!env) return '';
+  return [`# ${FOXY_INTRO(env)}`, ...exportFacts(env, opts).map(([k, v]) => `# ${k}: ${v}`)].map((l) => l.replace(/,/g, ';')).join('\r\n') + '\r\n';
 }
 
 /** Groups request records by `METHOD host/path`. */
@@ -238,6 +281,7 @@ export function groupEndpoints(records) {
     g.count += 1;
     g.firstSeenMs = Math.min(g.firstSeenMs, r.relMs);
     g.lastSeenMs = Math.max(g.lastSeenMs, r.relMs);
+    if (r.ts != null) { g.firstSeenAt = Math.min(g.firstSeenAt ?? r.ts, r.ts); g.lastSeenAt = Math.max(g.lastSeenAt ?? r.ts, r.ts); }
     const status = r.error ? 'error' : r.status ?? 'pending';
     g.statuses[status] = (g.statuses[status] || 0) + 1;
     if (r.initiatorText && !g.initiators.includes(r.initiatorText)) {
@@ -403,7 +447,7 @@ export const auditKey = (phase) => (phase.marker ? `phase:${phase.label}` : phas
  * reason and the code that makes the call. `phase` and `records` are what exportPhase returns; `verdicts` is `{ [endpoint]: { v, note } }`
  * for this phase. An endpoint nobody judged has `verdict: null`.
  */
-export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt = new Date().toISOString() }) {
+export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt = new Date().toISOString(), environment = null }) {
   const byEndpoint = new Map();
   for (const r of records) {
     const key = `${r.method} ${r.host}${r.path}`;
@@ -422,7 +466,7 @@ export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt =
       else seen.add(key);
       if (r.durationMs != null) durations.push(r.durationMs);
       (r.codeOwners || []).forEach((o) => teams.add(o));
-      if (!(r.codeOwners || []).length) (r.ownerCodeOwners || []).forEach((o) => via.add(o));
+      (r.ownerCodeOwners || []).forEach((o) => via.add(o));
       if (r.callSiteInfo) {
         const info = r.callSiteInfo, id = `${info.method}|${info.file}|${info.line}`;
         sites.set(id, { info, calls: (sites.get(id)?.calls || 0) + 1 });
@@ -435,7 +479,8 @@ export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt =
       calls: g.list.length, identicalDupes: dupes, statuses,
       avgMs: durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
       firstCallMs: Math.round(g.list[0].relMs),
-      codeOwners: [...teams], ownersViaCaller: [...via],
+      firstCallAt: isoLocal(g.list[0].ts), lastCallAt: isoLocal(g.list[g.list.length - 1].ts),
+      codeOwners: [...teams], ownersViaCaller: [...via].filter((o) => !teams.has(o)),
       callSites: [...sites.values()].sort((a, b) => b.calls - a.calls).map(({ info, calls }) => ({ function: info.method, file: info.file, line: info.line, kind: info.kind, package: info.pkg || null, calls })),
       requestIds: g.list.map((r) => r.id),
     };
@@ -444,6 +489,7 @@ export function buildAuditDocument({ phase, records, verdicts = {}, exportedAt =
   const unjudged = endpoints.filter((e) => !e.verdict).length;
   return {
     foxy: 'audit', version: 1, exportedAt,
+    exportedBy: environment ? { ...environment } : undefined,
     instructions: 'A human audited the network requests the MetaMask Mobile app makes during one phase of its run. Each endpoint carries the verdict they gave it for THIS phase only: '
       + VERDICTS.map((x) => `"${x.id}" = ${x.tip}`).join('; ')
       + '. A null verdict means it has not been judged yet, so assume nothing about it. For "defer", "move" and "drop" endpoints, use callSites (function, file, line) to find the code that makes the request and propose the change, quoting the reason. Leave "keep" endpoints alone.',
@@ -488,12 +534,13 @@ export function applyAuditEntries(audits, entries) {
 export const fileSlug = (text) => String(text).normalize('NFKD').replace(/[^\x00-\x7f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'phase';
 
 /** Skeleton of a recommendation table (keep, defer, move); the verdict columns are left for a human. */
-export function toMarkdown(records, { markers = [], sessionId = '' } = {}) {
+export function toMarkdown(records, { markers = [], sessionId = '', environment = null, scope = 'Whole capture' } = {}) {
   const groups = groupEndpoints(records);
   const esc = (s) => String(s).replace(/\|/g, '\\|');
   const lines = [
     `# Network requests (session ${sessionId || 'n/a'})`,
     '',
+    ...(environment ? [factsMarkdown(environment, { scope, shown: records.length, total: records.length }).trimEnd(), ''] : []),
     `${records.length} requests across ${groups.length} distinct endpoints.`,
     '',
   ];
@@ -513,12 +560,12 @@ export function toMarkdown(records, { markers = [], sessionId = '' } = {}) {
     lines.push('');
   }
   lines.push(
-    '| # | Request | Calls | Identical dupes | First (+s) | Call site <- owner | Code owners | Needed on Onboarding? | Verdict | Reason / target flow |',
-    '|---|---------|-------|-----------------|------------|--------------------|-------------|-----------------------|---------|----------------------|',
+    '| # | Request | Calls | Identical dupes | First (+s) | First call at | Call site <- owner | Code owners | Needed on Onboarding? | Verdict | Reason / target flow |',
+    '|---|---------|-------|-----------------|------------|---------------|--------------------|-------------|-----------------------|---------|----------------------|',
   );
   groups.forEach((g, i) => {
     lines.push(
-      `| ${i + 1} | \`${esc(g.endpoint)}\` | ${g.count} | ${g.duplicateIdenticalCalls} | ${(g.firstSeenMs / 1000).toFixed(1)} | ${esc(g.initiators.slice(0, 2).join(' ; ') || '(unknown)')} | ${esc(g.owners.map(teamName).join(', ') || '3rd party / unknown')} |  |  |  |`,
+      `| ${i + 1} | \`${esc(g.endpoint)}\` | ${g.count} | ${g.duplicateIdenticalCalls} | ${(g.firstSeenMs / 1000).toFixed(1)} | ${isoLocal(g.firstSeenAt)} | ${esc(g.initiators.slice(0, 2).join(' ; ') || '(unknown)')} | ${esc(g.owners.map(teamName).join(', ') || '3rd party / unknown')} |  |  |  |`,
     );
   });
   return lines.join('\n');

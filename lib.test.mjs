@@ -5,6 +5,11 @@ import {
   parseFrame,
   classifyFrame,
   summarizeInitiator,
+  effectiveOwners,
+  isoLocal,
+  exportFacts,
+  factsMarkdown,
+  factsCsv,
   shortFile,
   cleanMethod,
   packageName,
@@ -496,4 +501,61 @@ test('an empty gap is hidden, and an end that comes after the next marker is ign
   assert.deepEqual(phases.map((p) => p.label), ['a', 'b']);
   assert.equal(phases[0].ended, false);
   assert.equal(phases[0].endMs, 1500);
+});
+
+test('started-from is the caller the table shows, so the hook behind a controller call owns the request too', () => {
+  const ctl = '/r/node_modules/@metamask/controller-utils/dist/util.cjs';
+  const s = summarizeInitiator([
+    sym('successfulFetch', ctl, 329, 33),
+    sym('successfulFetch', ctl, 328, 7), // the same function again: the old rule picked this one
+    sym('handleFetch', ctl, 345, 7),
+    sym('t1', '/r/app/components/Views/Homepage/Sections/Tokens/hooks/usePopularTokens.ts', 146, 42),
+  ]);
+  assert.equal(s.ownerInfo.method, 't1');
+  assert.equal(s.ownerRef.shortPath, s.callerInfo.file);
+});
+
+test('effectiveOwners lists the call site owners and the caller owners when they differ', () => {
+  assert.deepEqual(effectiveOwners({ codeOwners: ['@MetaMask/core-platform'], ownerCodeOwners: ['@MetaMask/metamask-assets'] }).owners, ['@MetaMask/core-platform', '@MetaMask/metamask-assets']);
+  assert.deepEqual(effectiveOwners({ codeOwners: ['@MetaMask/earn'], ownerCodeOwners: ['@MetaMask/earn'] }), { owners: ['@MetaMask/earn'], via: false });
+  assert.deepEqual(effectiveOwners({ codeOwners: [], ownerCodeOwners: ['@MetaMask/perps'] }), { owners: ['@MetaMask/perps'], via: true });
+});
+
+test('isoLocal is ISO 8601 with milliseconds and the local UTC offset, and reads back as the same instant', () => {
+  const ms = Date.UTC(2026, 10, 25, 19, 41, 5, 123);
+  assert.match(isoLocal(ms), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.123[+-]\d{2}:\d{2}$/);
+  assert.equal(new Date(isoLocal(ms)).getTime(), ms);
+  assert.equal(isoLocal(null), '');
+});
+
+test('export facts say where a file came from, and the CSV form has no commas to split a cell', () => {
+  const env = {
+    version: '0.1.0-beta.2', homepage: 'https://github.com/roz0n/foxy', exportedAtLocal: '2026-11-25T14:41:05.000-05:00', timeZone: 'America/New_York',
+    capture: { startedAtLocal: '2026-11-25T14:00:00.000-05:00' }, metro: 'http://localhost:8081', machine: 'darwin arm64',
+    app: { platform: 'ios', osVersion: '26.1', version: '7.80.0', build: '4000', environment: 'dev' },
+    checkout: { branch: 'feat/foxy-app', commit: 'abc1234', dirty: true, github: 'MetaMask/metamask-mobile' },
+  };
+  const facts = Object.fromEntries(exportFacts(env, { scope: 'Phase "Wallet ready"', shown: 3, total: 9 }));
+  assert.equal(facts.Scope, 'Phase "Wallet ready" · 3 of 9 requests');
+  assert.equal(facts['Source checkout'], 'feat/foxy-app @ abc1234 (uncommitted changes)');
+  assert.equal(facts.App, 'ios 26.1 · MetaMask Mobile 7.80.0 (4000)');
+  assert.equal(facts['App environment'], 'dev');
+  assert.match(factsMarkdown(env), /^> Exported from Foxy 0\.1\.0-beta\.2: the network-request auditor for MetaMask Mobile/);
+  assert.ok(factsCsv(env).split('\r\n').filter(Boolean).every((l) => l.startsWith('# ') && !l.includes(',')));
+  assert.equal(exportFacts(null).length, 0);
+});
+
+test('the audit document carries the export environment, call times, and caller owners next to the call site owners', () => {
+  const phase = { label: 'P', startMs: 0, endMs: null, open: true, requests: 2 };
+  const recs = [
+    { id: 1, key: 'k1', method: 'GET', host: 'h.io', path: '/a', query: '', url: 'https://h.io/a', relMs: 10, ts: Date.UTC(2026, 10, 25, 20, 0, 0), status: 200, durationMs: 5, codeOwners: ['@MetaMask/core-platform'], ownerCodeOwners: ['@MetaMask/metamask-assets', '@MetaMask/core-platform'], callSiteInfo: { method: 'f', file: 'x.ts', line: 1, kind: 'controller', pkg: 'x' } },
+    { id: 2, key: 'k2', method: 'GET', host: 'h.io', path: '/a', query: '', url: 'https://h.io/a', relMs: 20, ts: Date.UTC(2026, 10, 25, 20, 0, 5), status: 200, durationMs: 5, codeOwners: ['@MetaMask/core-platform'], ownerCodeOwners: [], callSiteInfo: { method: 'f', file: 'x.ts', line: 1, kind: 'controller', pkg: 'x' } },
+  ];
+  const doc = buildAuditDocument({ phase, records: recs, exportedAt: 'T', environment: { version: '9.9.9', app: { version: '7.80.0' } } });
+  assert.equal(doc.exportedBy.version, '9.9.9');
+  const [e] = doc.endpoints;
+  assert.deepEqual(e.codeOwners, ['@MetaMask/core-platform']);
+  assert.deepEqual(e.ownersViaCaller, ['@MetaMask/metamask-assets']);
+  assert.equal(new Date(e.firstCallAt).getTime(), Date.UTC(2026, 10, 25, 20, 0, 0));
+  assert.equal(new Date(e.lastCallAt).getTime(), Date.UTC(2026, 10, 25, 20, 0, 5));
 });

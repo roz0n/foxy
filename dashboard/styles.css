@@ -554,6 +554,7 @@ dialog.xdlg::backdrop { background: rgba(0, 0, 0, .6); backdrop-filter: blur(3px
 .xfilter[hidden] { display: none; }
 .xfoot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 16px 16px; }
 .xfoot .btn { border-radius: var(--r-ctl); min-width: 88px; justify-content: center; }
+.xfoot .btn.primary { min-width: 164px; } /* the label changes with the format; a fixed width keeps Cancel from shifting */
 dialog.xdlg { opacity: 0; transform: translateY(10px) scale(.98); transition: opacity .18s ease, transform .24s var(--ease-out), overlay .24s allow-discrete, display .24s allow-discrete; }
 dialog.xdlg[open] { opacity: 1; transform: none; }
 @starting-style { dialog.xdlg[open] { opacity: 0; transform: translateY(10px) scale(.98); } }

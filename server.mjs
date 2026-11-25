@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readFile, readdir, mkdir, appendFile, writeFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { release as osRelease } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { loadCodeowners, resolveFrameOwners, teamsIn } from './codeowners.mjs';
 import { createViewIndexer } from './views.mjs';
@@ -29,6 +30,9 @@ import {
   describeFrames,
   bodyFingerprint,
   slim,
+  isoLocal,
+  factsMarkdown,
+  factsCsv,
 } from './lib.mjs';
 
 const PORT = Number(process.env.FOXY_PORT || 8098);
@@ -80,6 +84,30 @@ function buildInfo() {
     dirty: git('status', '--porcelain') !== '', // uncommitted changes anywhere in the checkout
   };
 }
+/**
+ * What every export says about itself: the tool, when it was exported, the checkout and the app build the capture came from. `build` is
+ * passed in by callers that already have it, because it runs git.
+ */
+function exportEnvironment(sid, build = buildInfo()) {
+  const s = sessions.get(sid) ?? sessions.get(latestSession);
+  const now = Date.now();
+  return {
+    tool: 'Foxy',
+    description: 'Network-request auditor for MetaMask Mobile',
+    version: build.version,
+    homepage: 'https://github.com/roz0n/foxy',
+    exportedAt: new Date(now).toISOString(),
+    exportedAtLocal: isoLocal(now),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    checkout: { branch: build.branch, commit: build.commit, dirty: build.dirty, github: GITHUB.repo, ref: GITHUB.ref },
+    app: s ? { platform: s.platform ?? null, ...(s.app || {}) } : null,
+    capture: s ? { startedAt: s.startedAt ? new Date(s.startedAt).toISOString() : null, startedAtLocal: isoLocal(s.startedAt), relaunches: s.relaunches || 0 } : null,
+    metro: METRO,
+    machine: `${process.platform} ${process.arch} ${osRelease()} (Node ${process.versions.node})`,
+  };
+}
+/** A request as exported: the record, with when it started and finished as local ISO times next to the relative ones. */
+const withTimes = (r) => ({ ...r, startedAt: isoLocal(r.ts), finishedAt: r.durationMs == null ? null : isoLocal(r.ts + r.durationMs) });
 /** Screen name -> where it is defined in the app source (see views.mjs). */
 const VIEWS = createViewIndexer(REPO);
 /** A frame inside node_modules -> its package's source on GitHub (see packages.mjs). */
@@ -242,7 +270,7 @@ function ingest(msg) {
       // the new runtime numbers its requests from 1 again, so carry on from the last number shown
       capture.idBase = (capture.idBase || 0) - (capture.lastId || 0);
       capture.lastId = 0;
-      Object.assign(capture, { platform: msg.platform, connectedAt: Date.now(), relaunches: (capture.relaunches || 0) + 1 });
+      Object.assign(capture, { platform: msg.platform, app: msg.app ?? capture.app, connectedAt: Date.now(), relaunches: (capture.relaunches || 0) + 1 });
       console.log(`[foxy] app relaunched (${msg.platform}) session ${msg.s}, continuing the capture of ${latestSession}`);
       broadcast({ type: 'relaunch', session: { ...capture } });
       return;
@@ -255,6 +283,7 @@ function ingest(msg) {
       id: sid,
       startedAt: previous?.startedAt ?? msg.startedAt,
       platform: msg.platform,
+      app: msg.app ?? previous?.app, // version, build, OS and environment, from newer bridges
       connectedAt: Date.now(),
     });
     latestSession = sid;
@@ -442,6 +471,7 @@ const httpServer = createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=3600' });
       res.end(await readFile(join(__dirname, 'pwa', name)));
     } else if (p === '/api/status') {
+      const build = buildInfo();
       json(res, {
         latestSession,
         sessions: [...sessions.values()],
@@ -450,7 +480,8 @@ const httpServer = createServer(async (req, res) => {
         logFile: LOG_FILE,
         codeowners: { repo: Boolean(repoRules), core: Boolean(coreRules) },
         github: GITHUB,
-        build: buildInfo(),
+        build,
+        environment: exportEnvironment(latestSession, build),
       });
     } else if (p === '/api/view') {
       json(res, { route: url.searchParams.get('route'), source: VIEWS.get(url.searchParams.get('route') || '') });
@@ -479,6 +510,8 @@ const httpServer = createServer(async (req, res) => {
       const body = toMarkdown(all, {
         sessionId: sid === 'latest' ? latestSession : sid,
         markers: sessionMarkers(latestSession),
+        environment: exportEnvironment(sid === 'latest' ? latestSession : sid),
+        scope: all.length === records.size ? 'Whole capture' : 'Filtered requests',
       });
       res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' });
       res.end(body);
@@ -500,13 +533,13 @@ const httpServer = createServer(async (req, res) => {
         'access-control-expose-headers': 'content-disposition',
       });
       if (md) {
-        res.end(toMarkdown(inPhase.map(slim), { sessionId: sid, markers: [] }));
+        res.end(toMarkdown(inPhase.map(slim), { sessionId: sid, markers: [], environment: exportEnvironment(sid), scope: `Phase "${phase.label}"` }));
       } else {
         res.end(JSON.stringify({
-          foxy: { exportedAt: new Date().toISOString(), session: sid, build: buildInfo() },
+          foxy: { ...exportEnvironment(sid), session: sid },
           phase,
           // the full records: request and response headers and bodies, and the call chain with owners and GitHub links
-          requests: inPhase.map((r) => ({ ...r, frames: describeFrames(r.frames, ownersOfInfo).map((f) => ({ ...f, link: PACKAGE_LINK(f) })) })),
+          requests: inPhase.map((r) => ({ ...withTimes(r), frames: describeFrames(r.frames, ownersOfInfo).map((f) => ({ ...f, link: PACKAGE_LINK(f) })) })),
         }, null, 2));
       }
     } else if (p === '/api/phases') {
@@ -539,7 +572,7 @@ const httpServer = createServer(async (req, res) => {
       const found = resolvePhase(listPhases(sessionRecords, sessionMarks), url.searchParams.get('phase'));
       if (found.error) { json(res, { error: found.error }, 404); return; }
       const inPhase = exportPhase(sessionRecords, sessionMarks, found.phase.id);
-      const doc = buildAuditDocument({ phase: inPhase.phase, records: inPhase.records, verdicts: audits[auditKey(found.phase)] });
+      const doc = buildAuditDocument({ phase: inPhase.phase, records: inPhase.records, verdicts: audits[auditKey(found.phase)], environment: exportEnvironment(sid) });
       res.writeHead(200, {
         'content-type': 'application/json; charset=utf-8',
         'content-disposition': `attachment; filename="foxy-audit-${fileSlug(found.phase.label)}.json"`,
@@ -562,12 +595,12 @@ const httpServer = createServer(async (req, res) => {
         'access-control-expose-headers': 'content-disposition',
       });
       res.end(JSON.stringify({
-        foxy: { exportedAt: new Date().toISOString(), session: sid, platform: sessions.get(sid)?.platform ?? null, build: buildInfo() },
+        foxy: { ...exportEnvironment(sid), session: sid, platform: sessions.get(sid)?.platform ?? null },
         summary: { requests: all.length, markers: sessionMarks.length, phases: phases.length },
         markers: sessionMarks,
         phases,
         // the full records: request and response headers and bodies, and the call chain with owners and GitHub links
-        requests: all.map((r) => ({ ...r, frames: describeFrames(r.frames, ownersOfInfo).map((f) => ({ ...f, link: PACKAGE_LINK(f) })) })),
+        requests: all.map((r) => ({ ...withTimes(r), frames: describeFrames(r.frames, ownersOfInfo).map((f) => ({ ...f, link: PACKAGE_LINK(f) })) })),
       }, null, 2));
     } else if (p === '/api/markers' && req.method === 'GET') {
       json(res, { markers: sessionMarkers(latestSession) });
@@ -621,6 +654,14 @@ const httpServer = createServer(async (req, res) => {
         broadcast({ type: 'markers', markers: sessionMarkers(latestSession) });
         json(res, { ok: true });
       }
+    } else if (p === '/api/export/header') {
+      // The "exported from Foxy" block the dashboard puts at the top of the CSV and markdown it builds itself
+      const opts = { scope: url.searchParams.get('scope') || 'Whole capture', shown: Number(url.searchParams.get('shown')), total: Number(url.searchParams.get('total')) };
+      if (!Number.isFinite(opts.shown)) delete opts.shown;
+      if (!Number.isFinite(opts.total)) delete opts.total;
+      const env = exportEnvironment(latestSession);
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(url.searchParams.get('format') === 'csv' ? factsCsv(env, opts) : factsMarkdown(env, opts));
     } else if (p === '/api/owners') {
       json(res, { teams: teamsIn(repoRules, coreRules) });
     } else if (p === '/api/storage') {

@@ -70,7 +70,9 @@ function renderChain(r, d) {
   const infra = d.frames.filter((f) => f.kind === 'infra');
   if (!real.length) return '<div class="dim">No JavaScript frames survived (the call crossed an async boundary before reaching fetch).</div>';
   const callSite = real[0];
-  const starter = real.slice(1).find((f) => f.kind === 'app' || f.kind === 'controller');
+  // The server picked it (r.ownerInfo): the caller shown beside the call site, else the nearest app or @metamask frame after it
+  const sameFrame = (f, o) => o && f.method === o.method && f.file === o.file && f.line === o.line;
+  const starter = real.slice(1).find((f) => sameFrame(f, r.ownerInfo)) || real.slice(1).find((f) => f.kind === 'app' || f.kind === 'controller');
   const nodes = real.slice().reverse().map((f) => {
     const isCall = f === callSite, isStarter = f === starter;
     const kind = f.unsymbolicated ? 'unsymbolicated' : f.kind;
@@ -106,7 +108,7 @@ function renderIO(r, d) {
   const na = '<span class="na">—</span>';
   const meta = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
   const overview = `<div class="ov"><div class="ov-line"><span class="meth">${esc(r.method)}</span><span class="url"><b>${esc(r.host)}</b>${esc(r.path)}</span>${hlSwitch(r.key)}</div>
-    <dl class="ov-meta">${meta('Status', stPill(stClass(r), r.error ? 'error' : r.status ?? '…', stBucket(r.error ? 'error' : r.status), res?.statusText || ''))}${meta('Started', `+${tf(r.relMs)}`)}${meta('Duration', r.durationMs != null ? fmtMs(r.durationMs) : na)}${meta('Size', r.sizeBytes != null ? bytes(r.sizeBytes) : na)}${meta('Via', esc(r.transport || 'fetch'))}</dl></div>`;
+    <dl class="ov-meta">${meta('Status', stPill(stClass(r), r.error ? 'error' : r.status ?? '…', stBucket(r.error ? 'error' : r.status), res?.statusText || ''))}${meta('Date', esc(dayOf(r.ts)))}${meta('Started', `<span title="${esc(fullTime(r.ts))}">${esc(clock(r.ts))}</span> <span class="dim">+${tf(r.relMs)}</span>`)}${meta('Finished', r.durationMs != null ? `<span title="${esc(fullTime(r.ts + r.durationMs))}">${esc(clock(r.ts + r.durationMs))}</span>` : na)}${meta('Duration', r.durationMs != null ? fmtMs(r.durationMs) : na)}${meta('Size', r.sizeBytes != null ? bytes(r.sizeBytes) : na)}${meta('Via', esc(r.transport || 'fetch'))}</dl></div>`;
   const request = `<section class="io-sec"><h4>Request</h4>
     ${qn ? row('Query parameters', { count: qn, body: kvTable(qp), open: true, copy: kvLines(qp, '='), copyTitle: 'Copy all query parameters' }) : ''}
     ${headers(hdrReq, 'Copy request headers')}
