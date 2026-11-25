@@ -94,7 +94,7 @@ const HELP = [
       <li><b>Clear</b>: a fresh capture. Request numbers start again at 1, and markers and highlights go.</li>
     </ul>
     <h3>Why Two Menus in the Desktop App</h3>
-    <p>The menu button holds everything about the capture and the view. It is the same in the app, a browser tab and <code>yarn foxy</code>. The macOS menu bar holds only what needs the operating system:</p>
+    <p>The menu button holds everything about the capture and the view. It is the same in the app, a browser tab and <code>npm start</code>. The macOS menu bar holds only what needs the operating system:</p>
     <ul>
       <li><b>File &gt; Switch MetaMask Mobile Folder…</b> (${kb('⌘')} ${kb('O')}) points Foxy at another checkout. <b>Recent Folders</b> remembers the last few. Foxy restarts to switch, and asks first if that would drop a capture. <b>Show Folder in Finder</b> and <b>Set Up App for Foxy…</b> are here too.</li>
       <li><b>Foxy &gt; Open Dashboard in Browser</b>, <b>Show Data Folder</b> (log, audit verdicts, CODEOWNERS cache) and <b>Copy MCP Config…</b> (gives an agent access to the capture).</li>

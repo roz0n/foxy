@@ -530,7 +530,7 @@ test('isoLocal is ISO 8601 with milliseconds and the local UTC offset, and reads
 
 test('export facts say where a file came from, and the CSV form has no commas to split a cell', () => {
   const env = {
-    version: '0.1.0-beta.2', homepage: 'https://github.com/roz0n/foxy', exportedAtLocal: '2026-11-25T14:41:05.000-05:00', timeZone: 'America/New_York',
+    version: '0.1.0-alpha.1', homepage: 'https://github.com/roz0n/foxy', exportedAtLocal: '2026-11-25T14:41:05.000-05:00', timeZone: 'America/New_York',
     capture: { startedAtLocal: '2026-11-25T14:00:00.000-05:00' }, metro: 'http://localhost:8081', machine: 'darwin arm64',
     app: { platform: 'ios', osVersion: '26.1', version: '7.80.0', build: '4000', environment: 'dev' },
     checkout: { branch: 'feat/foxy-app', commit: 'abc1234', dirty: true, github: 'MetaMask/metamask-mobile' },
@@ -540,7 +540,7 @@ test('export facts say where a file came from, and the CSV form has no commas to
   assert.equal(facts['Source checkout'], 'feat/foxy-app @ abc1234 (uncommitted changes)');
   assert.equal(facts.App, 'ios 26.1 · MetaMask Mobile 7.80.0 (4000)');
   assert.equal(facts['App environment'], 'dev');
-  assert.match(factsMarkdown(env), /^> Exported from Foxy 0\.1\.0-beta\.2: the network-request auditor for MetaMask Mobile/);
+  assert.match(factsMarkdown(env), /^> Exported from Foxy 0\.1\.0-alpha\.1: the network-request auditor for MetaMask Mobile/);
   assert.ok(factsCsv(env).split('\r\n').filter(Boolean).every((l) => l.startsWith('# ') && !l.includes(',')));
   assert.equal(exportFacts(null).length, 0);
 });

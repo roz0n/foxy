@@ -6,12 +6,16 @@
 //   node setup.mjs            check and fix everything
 //   node setup.mjs --check    report only, change nothing (what agents use to diagnose)
 //   node setup.mjs --no-skill do not install the agent skill
+//   node setup.mjs --uninstall take the bridge back out of the checkout
+//
+// Foxy installs its own in-app bridge (bridge/ -> app/dev-tools/Foxy, plus one import in index.js), so the checkout needs
+// nothing of Foxy's beforehand.
 //
 // Exit codes: 0 ready, 2 a prerequisite is missing (the message says what to run), 4 Foxy is already running.
 
 /* global AbortSignal */
 import {
-  existsSync, mkdirSync, readFileSync, statSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, rmSync, rmdirSync, statSync, writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -192,7 +196,134 @@ export function installSkill({ repo = REPO, source = join(HERE, 'skill', 'skill.
   return { written, current };
 }
 
+// ---- the in-app bridge --------------------------------------------------------------------------------------------------
+// Foxy owns the bridge (bridge/ in this repo) and installs it into the checkout, so the app repo needs nothing of Foxy's
+// beforehand: three files in app/dev-tools/Foxy, one import in index.js, FOXY="true" in .js.env.
+const BRIDGE_DIR = join('app', 'dev-tools', 'Foxy');
+const BRIDGE_FILES = ['FoxyBridge.ts', 'FoxyView.ts', 'install.ts'];
+const BRIDGE_IMPORT = "import './app/dev-tools/Foxy/install';";
+const BRIDGE_IMPORT_RE = /^\s*import\s+['"]\.\/app\/dev-tools\/Foxy\/install['"];?\s*$/;
+const BRIDGE_COMMENT = '// Foxy network dashboard (dev only, a no-op unless FOXY=true). Added by Foxy, see https://github.com/roz0n/foxy';
+const EXCLUDE_LINE = '/app/dev-tools/Foxy/';
+
+/**
+ * Adds the bridge import to the text of the app's index.js, after the Nitro setup imports (the bridge has to wrap the fetch
+ * Nitro installs, and has to load before anything can make a request). `how` is 'present' (nothing to do), 'added', or
+ * 'unplaceable' when index.js has neither the Nitro import nor shim.js to anchor on.
+ */
+export function addBridgeImport(text) {
+  if (text.split(/\r?\n/).some((line) => BRIDGE_IMPORT_RE.test(line))) return { text, changed: false, how: 'present' };
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  const lastMatch = (re) => lines.reduce((at, line, i) => (re.test(line) ? i : at), -1);
+  const at = [/^\s*import\s+['"]\.\/app\/core\/Nitro\w+['"]/, /^\s*import\s+['"]\.\/shim(\.js)?['"]/].map(lastMatch).find((i) => i >= 0);
+  if (at === undefined) return { text, changed: false, how: 'unplaceable' };
+  lines.splice(at + 1, 0, '', BRIDGE_COMMENT, BRIDGE_IMPORT);
+  return { text: lines.join(eol), changed: true, how: 'added' };
+}
+
+/** Takes the bridge import (and the comment lines that introduce it) back out of index.js. */
+export function removeBridgeImport(text) {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  const at = lines.findIndex((line) => BRIDGE_IMPORT_RE.test(line));
+  if (at < 0) return { text, changed: false };
+  let from = at;
+  while (from > 0 && /^\s*\/\/.*(Foxy|Nitro fetch setup|make a request)/.test(lines[from - 1])) from -= 1;
+  if (from > 0 && lines[from - 1] === '') from -= 1; // the blank line that set the block apart
+  lines.splice(from, at - from + 1);
+  return { text: lines.join(eol), changed: true };
+}
+
+const sameFile = (a, b) => existsSync(a) && existsSync(b) && readFileSync(a, 'utf8') === readFileSync(b, 'utf8');
+const git = (repo, args) => { try { return execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim(); } catch { return null; } };
+const bridgeIsTracked = (repo) => git(repo, ['ls-files', '--error-unmatch', join(BRIDGE_DIR, 'install.ts')]) !== null;
+
+/** Where git keeps this checkout's private ignore list (it works for worktrees too), or null outside a git repo. */
+function excludeFile(repo) {
+  const path = git(repo, ['rev-parse', '--git-path', 'info/exclude']);
+  return path ? (path.startsWith('/') ? path : join(repo, path)) : null;
+}
+
+/** Is the bridge in the checkout, current, and imported? A read-only look, for setup --check and the desktop menu. */
+export function bridgeStatus({ repo = REPO, source = join(HERE, 'bridge') } = {}) {
+  const files = Object.fromEntries(BRIDGE_FILES.map((name) => {
+    const target = join(repo, BRIDGE_DIR, name);
+    return [name, !existsSync(target) ? 'missing' : sameFile(join(source, name), target) ? 'current' : 'stale'];
+  }));
+  const indexFile = join(repo, 'index.js');
+  const imported = existsSync(indexFile) && readFileSync(indexFile, 'utf8').split(/\r?\n/).some((line) => BRIDGE_IMPORT_RE.test(line));
+  // A branch that carries its own bridge (tracked by git) is left alone: it is that branch's to update.
+  const tracked = bridgeIsTracked(repo);
+  return { files, imported, tracked, ready: imported && (tracked || Object.values(files).every((state) => state === 'current')) };
+}
+
+/**
+ * Puts the bridge into the checkout. Idempotent; only files that differ are written, so it also brings an older copy
+ * up to date. The new files are kept out of `git status` through the checkout's private `.git/info/exclude`. The one
+ * line added to index.js is a tracked edit, so it does show up: do not commit it (`--uninstall` takes it out).
+ */
+export function installBridge({ repo = REPO, source = join(HERE, 'bridge'), dryRun = false } = {}) {
+  const result = { written: [], current: [], index: 'present', excluded: false, tracked: bridgeIsTracked(repo) };
+  if (!existsSync(source)) return { ...result, missing: true };
+  const indexFile = join(repo, 'index.js');
+  if (!existsSync(indexFile)) return { ...result, index: 'no-index' };
+  for (const name of result.tracked ? [] : BRIDGE_FILES) {
+    const target = join(repo, BRIDGE_DIR, name);
+    if (sameFile(join(source, name), target)) { result.current.push(name); continue; }
+    if (!dryRun) {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, readFileSync(join(source, name)));
+    }
+    result.written.push(name);
+  }
+  const edit = addBridgeImport(readFileSync(indexFile, 'utf8'));
+  result.index = edit.how;
+  if (edit.changed && !dryRun) writeFileSync(indexFile, edit.text);
+  const exclude = excludeFile(repo);
+  if (!dryRun && exclude && !result.tracked) {
+    const now = existsSync(exclude) ? readFileSync(exclude, 'utf8') : '';
+    if (!now.split(/\r?\n/).includes(EXCLUDE_LINE)) {
+      mkdirSync(dirname(exclude), { recursive: true });
+      writeFileSync(exclude, `${now}${now && !now.endsWith('\n') ? '\n' : ''}${EXCLUDE_LINE}\n`);
+      result.excluded = true;
+    }
+  }
+  return result;
+}
+
+/** Undoes installBridge: removes the import and the three files. Files git tracks are left alone (they belong to the branch). */
+export function uninstallBridge({ repo = REPO } = {}) {
+  const result = { removedImport: false, removedFiles: [], keptTracked: false };
+  const indexFile = join(repo, 'index.js');
+  if (existsSync(indexFile)) {
+    const edit = removeBridgeImport(readFileSync(indexFile, 'utf8'));
+    if (edit.changed) { writeFileSync(indexFile, edit.text); result.removedImport = true; }
+  }
+  if (bridgeIsTracked(repo)) { result.keptTracked = true; return result; }
+  for (const name of BRIDGE_FILES) {
+    const target = join(repo, BRIDGE_DIR, name);
+    if (existsSync(target)) { rmSync(target); result.removedFiles.push(name); }
+  }
+  try { rmdirSync(join(repo, BRIDGE_DIR)); } catch { /* not empty or already gone */ }
+  const exclude = excludeFile(repo);
+  if (exclude && existsSync(exclude)) {
+    const lines = readFileSync(exclude, 'utf8').split(/\r?\n/);
+    if (lines.includes(EXCLUDE_LINE)) writeFileSync(exclude, lines.filter((line) => line !== EXCLUDE_LINE).join('\n'));
+  }
+  return result;
+}
+
 export async function main(argv = process.argv.slice(2), env = process.env) {
+  if (argv.includes('--uninstall')) {
+    const done = uninstallBridge();
+    console.log('Foxy uninstall');
+    console.log(done.removedImport ? '  ✓ import removed from index.js' : '  • index.js had no Foxy import');
+    if (done.keptTracked) console.log('  • app/dev-tools/Foxy is tracked by git on this branch, so the files were kept');
+    else console.log(done.removedFiles.length ? `  ✓ removed app/dev-tools/Foxy (${done.removedFiles.join(', ')})` : '  • app/dev-tools/Foxy was not there');
+    console.log('  • FOXY="true" is still in .js.env; it does nothing without the bridge (delete the line if you like)');
+    return 0;
+  }
   const check = argv.includes('--check');
   const withSkill = !argv.includes('--no-skill') && env.FOXY_SKIP_SKILL !== '1';
   const port = Number(env.FOXY_PORT || 8098);
@@ -210,6 +341,21 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
 
   try { createRequire(import.meta.url).resolve('ws'); ok('ws installed'); } catch {
     return fail('The `ws` package is missing. Run `npm install` in the Foxy folder, then try again');
+  }
+
+  // The bridge: Foxy carries it and installs it, so any MetaMask Mobile checkout works as it is.
+  const bridge = bridgeStatus();
+  if (bridge.ready) ok(bridge.tracked ? 'Foxy bridge comes with this branch (app/dev-tools/Foxy is tracked), left as it is' : 'Foxy bridge is installed and current (app/dev-tools/Foxy)');
+  else if (check) warn(`Foxy bridge ${bridge.imported ? 'is out of date or incomplete' : 'is not installed'} in this checkout (Foxy installs it when it starts)`);
+  else {
+    const done = installBridge();
+    if (done.missing) return fail('The bridge folder is missing from this copy of Foxy (bridge/). Reinstall Foxy');
+    if (done.index === 'no-index') return fail('This folder has no index.js, so it does not look like a MetaMask Mobile checkout');
+    if (done.index === 'unplaceable') {
+      return fail(`Could not find where to import the bridge in index.js. Add this line after the Nitro fetch setup import yourself, then run setup again:\n    ${BRIDGE_IMPORT}`);
+    }
+    ok(`Foxy bridge installed in app/dev-tools/Foxy${done.written.length ? ` (${done.written.join(', ')})` : ''}${done.index === 'added' ? '; one import added to index.js' : ''}`);
+    if (done.index === 'added') note('index.js now differs from git. That is the only tracked change, do not commit it (`node setup.mjs --uninstall` removes it)');
   }
 
   // .js.env: Foxy is opt-in, so make sure the app is told to send requests.

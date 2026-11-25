@@ -73,7 +73,7 @@ async function chooseAppDir({ first = false } = {}) {
 
 async function changeAppDir() {
   const dir = await chooseAppDir();
-  if (dir) await useAppDir(dir);
+  if (dir) { await offerSetup(dir); await useAppDir(dir); }
 }
 
 /** Points Foxy at another checkout. The server reads the folder once, when it starts, so Foxy restarts, and that clears the capture. */
@@ -88,7 +88,7 @@ async function useAppDir(dir) {
     await dialog.showMessageBox({
       type: 'warning',
       message: 'Another Foxy is serving this window',
-      detail: `Foxy found a server already running on port ${port} (for example \`yarn foxy\` in a terminal) and is showing that one, so it cannot switch folders. Stop that server and open Foxy again; it will use:\n\n${dir}`,
+      detail: `Foxy found a server already running on port ${port} (for example \`npm start\` in a terminal) and is showing that one, so it cannot switch folders. Stop that server and open Foxy again; it will use:\n\n${dir}`,
     });
     remember(dir);
     return;
@@ -113,25 +113,69 @@ function remember(dir) {
   settings.appDir = dir; settings.asked = true; saveSettings(); buildMenu();
 }
 
-/** Turns FOXY="true" on in the app's .js.env (the same step `setup.mjs` does), creating the file from .js.env.example when needed. */
-async function prepareApp() {
-  const dir = settings.appDir;
-  if (!dir) { await dialog.showMessageBox({ type: 'info', message: 'Choose your MetaMask Mobile folder first.', detail: 'File > Switch MetaMask Mobile Folder… (⌘O)' }); return; }
-  const { setEnvFlag } = await import('../setup.mjs');
+/**
+ * Sets a MetaMask Mobile checkout up for Foxy: the bridge (app/dev-tools/Foxy plus one import in index.js) and FOXY="true" in
+ * .js.env, creating that file from .js.env.example when needed. Idempotent; returns what it changed, or null when nothing was needed.
+ */
+function applySetup(dir) {
+  const { setEnvFlag, installBridge } = setupModule;
+  const bridge = installBridge({ repo: dir });
   const envFile = join(dir, '.js.env');
   const example = join(dir, '.js.env.example');
   const current = existsSync(envFile) ? readFileSync(envFile, 'utf8') : existsSync(example) ? readFileSync(example, 'utf8') : '';
-  const result = setEnvFlag(current, 'FOXY', 'true');
-  if (!result.changed && existsSync(envFile)) {
-    await dialog.showMessageBox({ type: 'info', message: 'The app is already set up.', detail: `${envFile} has FOXY="true".` });
+  const env = setEnvFlag(current, 'FOXY', 'true');
+  const envChanged = env.changed || !existsSync(envFile);
+  if (envChanged) writeFileSync(envFile, env.text);
+  const changes = [];
+  if (bridge.written.length) changes.push(`Bridge installed in app/dev-tools/Foxy (${bridge.written.join(', ')})`);
+  if (bridge.index === 'added') changes.push('One import added to index.js (a tracked edit: do not commit it)');
+  if (envChanged) changes.push('FOXY="true" set in .js.env');
+  return { changes, problem: bridge.missing ? 'The bridge is missing from this copy of Foxy. Reinstall Foxy.' : bridge.index === 'no-index' ? 'This folder has no index.js, so it does not look like a MetaMask Mobile checkout.' : bridge.index === 'unplaceable' ? `Could not find where to import the bridge in index.js. Add this line after the Nitro fetch setup import:\n${"import './app/dev-tools/Foxy/install';"}` : null };
+}
+
+let setupModule = null;
+async function prepareApp({ asked = false, dir = settings.appDir } = {}) {
+  if (!dir) { await dialog.showMessageBox({ type: 'info', message: 'Choose your MetaMask Mobile folder first.', detail: 'File > Switch MetaMask Mobile Folder… (⌘O)' }); return; }
+  setupModule ??= await import('../setup.mjs');
+  const { changes, problem } = applySetup(dir);
+  if (problem) { await dialog.showMessageBox({ type: 'warning', message: 'Foxy could not set up this folder', detail: `${dir}\n\n${problem}` }); return; }
+  if (!changes.length) {
+    if (!asked) await dialog.showMessageBox({ type: 'info', message: 'The app is already set up.', detail: `${dir}\n\nThe bridge is current and .js.env has FOXY="true".` });
     return;
   }
-  writeFileSync(envFile, result.text);
   await dialog.showMessageBox({
     type: 'info',
-    message: 'FOXY="true" is now in .js.env',
-    detail: `${envFile}\n\nRestart Metro so the app picks it up: stop it, then run \`yarn watch:clean\` in the app folder. The bridge also has to be in the checkout (app/dev-tools/Foxy), which it is on the Foxy branch.`,
+    message: 'The app is set up for Foxy',
+    detail: `${dir}\n\n${changes.map((c) => `• ${c}`).join('\n')}\n\nRestart Metro so the app picks it up: stop it, then run \`yarn watch:clean\` in the app folder. File > Remove Foxy from App… undoes it.`,
   });
+}
+
+/** After a folder is picked: if it is not set up yet, say what Foxy will change in it and ask first. */
+async function offerSetup(dir) {
+  setupModule ??= await import('../setup.mjs');
+  const envFile = join(dir, '.js.env');
+  const flagged = existsSync(envFile) && !setupModule.setEnvFlag(readFileSync(envFile, 'utf8'), 'FOXY', 'true').changed;
+  if (flagged && setupModule.bridgeStatus({ repo: dir }).ready) return;
+  const { response } = await dialog.showMessageBox({
+    type: 'question',
+    message: 'Set this folder up for Foxy?',
+    detail: `${dir}\n\nFoxy needs a small bridge inside the app to see its requests. Setting up:\n\n• copies three files into app/dev-tools/Foxy (kept out of git status)\n• adds one import line to index.js (a tracked edit, do not commit it)\n• sets FOXY="true" in .js.env\n\nFile > Remove Foxy from App… undoes all of it.`,
+    buttons: ['Set Up', 'Not Now'], defaultId: 0, cancelId: 1,
+  });
+  if (response === 0) await prepareApp({ asked: true, dir });
+}
+
+async function removeFromApp() {
+  const dir = settings.appDir;
+  if (!dir) return;
+  setupModule ??= await import('../setup.mjs');
+  const done = setupModule.uninstallBridge({ repo: dir });
+  const lines = [
+    done.removedImport ? '• Import removed from index.js' : '• index.js had no Foxy import',
+    done.keptTracked ? '• app/dev-tools/Foxy is tracked by git on this branch, so its files were kept' : done.removedFiles.length ? '• app/dev-tools/Foxy removed' : '• app/dev-tools/Foxy was not there',
+    '• FOXY="true" is still in .js.env; it does nothing without the bridge',
+  ];
+  await dialog.showMessageBox({ type: 'info', message: 'Foxy was removed from the app', detail: `${dir}\n\n${lines.join('\n')}\n\nRestart Metro to apply it.` });
 }
 
 async function copyMcpConfig() {
@@ -164,6 +208,7 @@ function buildMenu() {
     { label: 'Show Folder in Finder', enabled: Boolean(current), click: () => void shell.openPath(current) },
     { type: 'separator' },
     { label: 'Set Up App for Foxy…', enabled: Boolean(current), click: () => void prepareApp() },
+    { label: 'Remove Foxy from App…', enabled: Boolean(current), click: () => void removeFromApp() },
     ...(isMac ? [{ type: 'separator' }, { role: 'close' }] : []),
   ];
   const foxy = [
@@ -232,7 +277,12 @@ async function ensureServer() {
   process.env.FOXY_LOG_FILE = process.env.FOXY_LOG_FILE || join(DATA, 'logs', 'foxy.jsonl');
   process.env.FOXY_PORT = String(port);
 
-  const { probePort, ensureCoreCodeowners } = await import('../setup.mjs');
+  const { probePort, ensureCoreCodeowners, bridgeStatus, installBridge } = await import('../setup.mjs');
+  // A checkout set up earlier keeps its bridge in step with this version of Foxy (only when it was set up before: never a first install).
+  try {
+    const bridge = bridgeStatus({ repo: process.env.FOXY_REPO });
+    if (bridge.imported && !bridge.ready) installBridge({ repo: process.env.FOXY_REPO });
+  } catch (error) { console.warn(`[foxy] could not refresh the bridge: ${error.message}`); }
   const state = await probePort(port);
   if (state === 'foxy') return 'attached';
   if (state === 'busy') {
@@ -288,7 +338,7 @@ if (!app.requestSingleInstanceLock() && !SMOKE) {
     if (!settings.asked) {
       settings.asked = true;
       const dir = await chooseAppDir({ first: true });
-      if (dir) settings.appDir = dir;
+      if (dir) { settings.appDir = dir; await offerSetup(dir); }
       saveSettings(); buildMenu();
     }
     if ((await ensureServer()) === 'busy') { app.quit(); return; }

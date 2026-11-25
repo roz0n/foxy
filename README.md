@@ -29,11 +29,13 @@ npm run dist                                     # builds dist/Foxy-<version>-ar
 
 ## Use it
 
-Foxy needs a small bridge inside the app. It ships with MetaMask Mobile at `app/dev-tools/Foxy` (it is not part of this repo) and turns on when `FOXY="true"` is set in the app's `.js.env`. Foxy sets that for you.
+Foxy is a standalone app. It carries its own in-app bridge (`bridge/`) and installs it into your MetaMask Mobile checkout, so the checkout needs nothing of Foxy's beforehand and any branch works.
 
-1. Open Foxy and pick your MetaMask Mobile folder. Restart Metro (`yarn watch:clean`) if Foxy says `.js.env` changed.
+1. Open Foxy and pick your MetaMask Mobile folder. Foxy asks before it touches the checkout, then sets it up (**File > Set Up App for Foxy…** does it again any time). Restart Metro (`yarn watch:clean`) so the app picks up the change.
 2. Start the debug app (`yarn start:ios` or `yarn start:android`). Requests stream into the dashboard.
 3. For a fresh capture, press **Clear** (in the menu), then fresh install and launch. Press `M` to drop a marker (for example `Onboarding visible`) as things happen. Press `?` for the in-app guide.
+
+**What Foxy changes in your checkout.** Three files in `app/dev-tools/Foxy` (kept out of `git status` through your local `.git/info/exclude`), `FOXY="true"` in `.js.env`, and one import line in `index.js`. That `index.js` line is the only tracked edit: do not commit it. **File > Remove Foxy from App…** (or `node setup.mjs --uninstall`) undoes all of it. When Foxy updates, it refreshes the installed bridge the next time it starts. A branch that already carries its own `app/dev-tools/Foxy` is left alone. The bridge only runs in a debug build with `FOXY="true"`.
 
 A Metro reload, crash or relaunch of the app continues the capture on screen, so markers and request numbers carry on; only Clear starts over.
 
@@ -64,10 +66,12 @@ From source: `claude mcp add foxy -- node /path/to/foxy/mcp.mjs`. The tools (`ne
 ## Development
 
 ```bash
-npm test         # 74 tests; two read real CODEOWNERS files and run only when FOXY_REPO and FOXY_CORE are set
+npm test         # the unit tests; two read real CODEOWNERS files and run only when FOXY_REPO and FOXY_CORE are set
 npm run smoke    # starts the desktop shell headless and checks the dashboard answers
 npm run pack     # unpacked Foxy.app in dist/ for a quick look
 ```
+
+The bridge source is `bridge/` (TypeScript, with its Jest tests beside it). Edit it here: setup copies it into the checkout. To run its tests, set up an app, copy `bridge/*.test.ts` next to the installed files and run `yarn jest app/dev-tools/Foxy` there.
 
 ## License
 
