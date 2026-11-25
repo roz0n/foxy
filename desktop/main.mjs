@@ -5,7 +5,7 @@
 //
 // Foxy reads a MetaMask Mobile checkout (CODEOWNERS, screens, git remote). Pick it on first launch, or later from the Foxy menu.
 //   FOXY_SMOKE=1  start the server, check it answers, print the result and exit (what CI runs)
-import { app, BrowserWindow, Menu, dialog, shell, clipboard } from 'electron';
+import { app, BrowserWindow, Menu, dialog, shell, clipboard, ipcMain } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -145,28 +145,6 @@ async function copyMcpConfig() {
   });
 }
 
-const sizeText = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
-
-/** Foxy > Log Storage…: how big the request log is and where it lives, with a button to empty it. Asks the running server, so it is right even when another Foxy serves the window. */
-async function logStorage() {
-  let info;
-  try { info = await (await fetch(`http://localhost:${port}/api/storage`)).json(); } catch { /* server not answering */ }
-  if (!info) { await dialog.showMessageBox({ type: 'warning', message: 'Foxy is not answering, so the log size is unknown.', detail: `Data folder: ${DATA}` }); return; }
-  const { response } = await dialog.showMessageBox({
-    type: 'info',
-    message: `Request log: ${sizeText(info.logBytes)}`,
-    detail: `${info.logFile}\n\nIt grows with every request Foxy sees and is only used to replay a capture. Emptying it does not touch the requests on screen or your audit verdicts.\n\nCODEOWNERS cache: ${sizeText(info.cacheBytes)} (${info.cacheDir})`,
-    buttons: ['Close', 'Empty Log File', 'Show in Finder'],
-    defaultId: 0,
-    cancelId: 0,
-  });
-  if (response === 1) {
-    await fetch(`http://localhost:${port}/api/storage/clear`, { method: 'POST' }).catch(() => {});
-  } else if (response === 2) {
-    shell.showItemInFolder(info.logFile);
-  }
-}
-
 function buildMenu() {
   const isMac = process.platform === 'darwin';
   const current = settings.appDir;
@@ -192,7 +170,6 @@ function buildMenu() {
     { label: 'Open Dashboard in Browser', click: () => void shell.openExternal(dashboardUrl()) },
     { label: 'Copy MCP Config…', click: () => void copyMcpConfig() },
     { label: 'Show Data Folder', click: () => void shell.openPath(DATA) },
-    { label: 'Log Storage…', click: () => void logStorage() },
   ];
   const template = [
     ...(isMac ? [{
@@ -207,6 +184,11 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// What the dashboard may ask for through desktop/preload.cjs. Only our own window, and only pages served by Foxy itself, get an answer.
+const fromDashboard = (event) => event.senderFrame?.url?.startsWith(dashboardUrl());
+ipcMain.handle('foxy:folder', (event) => (fromDashboard(event) ? settings.appDir || '' : ''));
+ipcMain.handle('foxy:switch-folder', (event) => { if (fromDashboard(event)) void changeAppDir(); });
+
 function createWindow() {
   if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); return; }
   const b = settings.bounds || {};
@@ -214,7 +196,7 @@ function createWindow() {
     width: b.width || 1480, height: b.height || 940, x: b.x, y: b.y, minWidth: 900, minHeight: 600,
     title: 'Foxy', backgroundColor: '#000000', show: false,
     ...(MAC ? { titleBarStyle: 'hidden', trafficLightPosition: TRAFFIC_LIGHTS } : {}),
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false, preload: join(ROOT, 'desktop', 'preload.cjs') },
   });
   win.once('ready-to-show', () => win?.show());
   if (MAC) {
@@ -279,13 +261,13 @@ async function smoke() {
 
 /** Opens the dashboard in a hidden window and reports script errors: its files share one scope, so a wrong load order only shows in a browser. */
 async function loadDashboard() {
-  const probe = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true } });
+  const probe = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true, preload: join(ROOT, 'desktop', 'preload.cjs') } });
   const errors = [];
   probe.webContents.on('console-message', (event) => { if (event.level === 'error') errors.push(`${event.message} (${event.sourceId.replace(/^https?:\/\/[^/]+/, '')}:${event.lineNumber})`); });
   await probe.loadURL(dashboardUrl());
   await new Promise((r) => setTimeout(r, 1500));
   const ready = await probe.webContents.executeJavaScript(
-    "typeof render === 'function' && typeof connect === 'function' && typeof openHelp === 'function' && Boolean(document.querySelector('#tabTimeline.active'))",
+    "typeof render === 'function' && typeof connect === 'function' && typeof openHelp === 'function' && Boolean(document.querySelector('#tabTimeline.active')) && typeof window.foxyDesktop?.folder === 'function' && !document.querySelector('#deskSwitch').hidden",
   ).catch((error) => { errors.push(String(error)); return false; });
   probe.destroy();
   return { ready, errors };

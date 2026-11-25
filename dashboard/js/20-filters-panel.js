@@ -25,7 +25,7 @@ function facetList(f) {
   for (const r of reqs.values()) for (const v of FACET_VALUES[f.id](r)) counts.set(v, (counts.get(v) || 0) + 1);
   for (const v of s.on) if (!counts.has(v)) counts.set(v, 0);
   if (f.id === 'status') for (const v of STATUS_ORDER) if (!counts.has(v)) counts.set(v, 0); // every kind of status is always listed, so the list never grows under you
-  if (f.id === 'team') for (const v of myTeams) if (!counts.has(v)) counts.set(v, 0);
+  if (f.id === 'team') for (const v of [...allTeams, ...myTeams]) if (!counts.has(v)) counts.set(v, 0); // every team is listed, with 0 until it makes a request
   const q = (fq[f.id] || '').trim().toLowerCase();
   // A fixed order: statuses in their natural order, everything else A to Z with the "none of the above" rows last.
   // Counts, picking a row and starring a team never move anything.
@@ -80,6 +80,7 @@ function renderFilters() {
   const mine = myTeams.size && !adv.team.not && sameSet(adv.team.on, myTeams);
   const presets = [
     { id: 'mine', label: 'My teams', ic: 'star', on: mine, off: !myTeams.size, tip: myTeams.size ? `Only requests owned by ${[...myTeams].join(', ')}` : 'Star a team in the list below to build My teams' },
+    { id: 'hl', label: 'Highlighted', ic: 'hl', on: ui.hl, off: !ui.hl && !highlights.size, tip: highlights.size ? 'Only the requests you highlighted' : 'Highlight a request from its open row first' },
     { id: 'slow', label: 'Slow (1s+)', on: adv.minMs === 1000, tip: 'Requests that took at least a second' },
     { id: 'srv', label: 'Server errors', on: !adv.status.not && adv.status.on.size === 1 && adv.status.on.has('5xx'), tip: 'Responses with a 5xx status' },
   ];
@@ -108,6 +109,7 @@ function setFlt(on) {
 }
 
 buildFilters();
+fetch('/api/owners').then((r) => r.json()).then((o) => { allTeams = o.teams || []; renderFilters(); }).catch(() => {});
 fltBtn.addEventListener('click', () => setFlt(!fltpop.classList.contains('open')));
 fltpop.addEventListener('click', (e) => {
   const t = e.target, sec = t.closest('.fsec[data-f]')?.dataset.f; let b;
@@ -119,6 +121,7 @@ fltpop.addEventListener('click', (e) => {
   else if ((b = t.closest('[data-preset]'))) {
     const id = b.dataset.preset;
     if (id === 'mine') { adv.team.on = b.getAttribute('aria-pressed') === 'true' ? new Set() : new Set(myTeams); adv.team.not = false; }
+    else if (id === 'hl') ui.hl = !ui.hl;
     else if (id === 'slow') adv.minMs = adv.minMs === 1000 ? 0 : 1000;
     else if (id === 'srv') { const on = b.getAttribute('aria-pressed') === 'true'; adv.status.on = on ? new Set() : new Set(['5xx']); adv.status.not = false; }
     render();

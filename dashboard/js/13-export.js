@@ -49,10 +49,12 @@ function exportFormats(scope) {
   };
   const csvReq = { id: 'csv-req', title: 'CSV, one row per request', tag: '.csv', verb: 'Download CSV', desc: 'Time, phase, method, host, path, status, duration, size, owners and call site. Opens in a spreadsheet.', run: () => save(requestsCsv(list()), `foxy-${slug}-requests-${stamp}.csv`, 'text/csv;charset=utf-8') };
   const csvEp = { id: 'csv-ep', title: 'CSV, one row per endpoint', tag: '.csv', verb: 'Download CSV', desc: 'Calls, dupes, failures, timings, owners and call site, with the verdict and reason you gave each one.', run: () => save(endpointsCsv(list()), `foxy-${slug}-endpoints-${stamp}.csv`, 'text/csv;charset=utf-8') };
-  const md = { id: 'md', title: 'Markdown table', tag: 'copies', verb: 'Copy Markdown', desc: 'A table to paste wherever you are writing this up.', run: async () => { await copyText(ph ? auditMarkdown(ph) : endpointsMarkdown(list())); return 'Copied!'; } };
-  if (!ph) return [json, csvReq, csvEp, md];
+  const md = { id: 'md', title: 'Markdown table, copy', tag: 'copies', verb: 'Copy Markdown', desc: 'A table to paste wherever you are writing this up.', run: async () => { await copyText(ph ? auditMarkdown(ph) : endpointsMarkdown(list())); return 'Copied!'; } };
+  const mdText = () => (ph ? auditMarkdown(ph) : endpointsMarkdown(list()));
+  const mdFile = { id: 'md-file', title: 'Markdown file', tag: '.md', verb: 'Download Markdown', desc: 'The same table, saved as a file you can attach to a PR or a ticket.', run: () => save(mdText(), `foxy-${slug}-${ph ? 'audit' : 'endpoints'}-${stamp}.md`, 'text/markdown;charset=utf-8') };
+  if (!ph) return [json, csvReq, csvEp, md, mdFile];
   const agent = { id: 'agent', title: 'JSON for an agent', tag: '.json', verb: 'Download JSON', desc: 'Verdicts, reasons and call sites, with instructions an AI agent can act on. Agents can also read it themselves (audit_get).', run: async () => { await flushAudits().catch(() => {}); await downloadFromServer('/api/audit/export?phase=' + encodeURIComponent(ph.id), `foxy-audit-${slug}.json`); return 'Saved'; } };
-  return [json, csvReq, csvEp, md, agent];
+  return [json, csvReq, csvEp, md, mdFile, agent];
 }
 function xRender() {
   const fmts = exportFormats(xScope);

@@ -31,6 +31,13 @@ menuBtn.addEventListener('click', () => { const on = !actions.classList.contains
 document.addEventListener('click', (e) => { if (!e.target.closest('#actions, #menuBtn')) setMenu(false); });
 actions.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && !b.closest('#timeSeg, #themeGrid')) setTimeout(() => setMenu(false), b.id === 'export' ? 900 : 0); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && actions.classList.contains('open')) { setMenu(false); menuBtn.focus(); } });
+// In the desktop app the window gets a small bridge (desktop/preload.cjs). A browser or `yarn foxy` has none, so these stay hidden there.
+if (window.foxyDesktop) {
+  const showDir = async () => { const dir = await window.foxyDesktop.folder(); $('#deskDir').innerHTML = dir ? `<b>${esc(dir.split('/').pop())}</b><code title="${esc(dir)}">${esc(dir)}</code>` : '<span class="dim">No folder chosen</span>'; };
+  ['#deskRow', '#deskSwitch', '#deskSep'].forEach((s) => { $(s).hidden = false; });
+  menuBtn.addEventListener('click', () => { if (actions.classList.contains('open')) showDir(); });
+  $('#deskSwitch').addEventListener('click', () => window.foxyDesktop.switchFolder());
+}
 $('#clearHl').addEventListener('click', () => {
   const n = highlights.size; if (!n) return;
   highlights.clear(); saveHighlights(); ui.hl = false; render();

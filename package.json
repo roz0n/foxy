@@ -33,6 +33,7 @@
     "files": [
       "desktop/main.mjs",
       "desktop/helpers.mjs",
+      "desktop/preload.cjs",
       "server.mjs",
       "lib.mjs",
       "mcp.mjs",

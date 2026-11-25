@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   parseCodeowners,
+  teamsIn,
   ownersFor,
   loadCodeowners,
   resolveFrameOwners,
@@ -71,4 +72,11 @@ test('real mobile CODEOWNERS: design system and Engine.ts', { skip: !mobile || !
 test('real core CODEOWNERS: assets-controllers', { skip: !core || !existsSync(core) }, () => {
   const real = loadCodeowners(core);
   assert.deepEqual(ownersFor(real, 'packages/assets-controllers/src/index.ts'), ['@MetaMask/metamask-assets']);
+});
+
+test('teamsIn lists every team once, without the @MetaMask/ prefix, skipping people', () => {
+  const app = parseCodeowners('/app/a @MetaMask/earn @MetaMask/core-platform\n/app/b @someone person@example.com @MetaMask/earn');
+  const core = parseCodeowners('/packages/x @MetaMask/accounts-engineers');
+  assert.deepEqual(teamsIn(app, core), ['accounts-engineers', 'core-platform', 'earn']);
+  assert.deepEqual(teamsIn(null, undefined), []);
 });

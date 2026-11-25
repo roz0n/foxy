@@ -30,7 +30,7 @@ const HELP = [
       <li><b>requests</b>: calls made while the phase was active.</li>
       <li><b>new endpoints</b>: URLs (method + host + path) seen for the first time in the whole capture. A high number early on tells you what the app needs to boot.</li>
       <li><b>identical dupes</b>: requests identical to one made <i>earlier</i>, even in a previous phase. These are the clearest candidates to cache or remove.</li>
-      <li><b>🌙 quiet</b>: nothing was requested. That is good news for a phase where you were just looking at a screen.</li>
+      <li><b>${icon('quiet')} quiet</b>: nothing was requested. That is good news for a phase where you were just looking at a screen.</li>
     </ul>
     <h3>A Good First Run</h3>
     ${art('recipe', 'Step-by-step recipe for a fresh-install capture with the markers to drop at each moment')}
@@ -71,8 +71,9 @@ const HELP = [
       <li><b>We Own</b>: the call site is code with a CODEOWNERS team. <b>Third-party</b>: it is inside a package such as Segment or Sentry. <b>Unowned</b>: neither.</li>
       <li><b>Failed</b>: errors, aborts and 4xx/5xx. <b>Duplicates</b>: identical requests made more than once. <b>Highlighted</b>: only the rows you highlighted (open a row and click the highlighter icon at the right of its request line, or press ${kb('H')}). Clear removes the highlights with the capture.</li>
       <li>Click a team or package chip anywhere to filter by it. Click a phase chip to filter by phase.</li>
+      <li><b>Highlighted</b> is also a quick filter in the Filters panel.</li>
       <li>Type in the filter box (${kb('/')}) to match host, path, call site or team.</li>
-      <li><b>Filters</b> (${kb('F')}) opens a panel to pick several teams, statuses, methods or hosts at once, flip any of them to <i>Is not</i>, and set a minimum duration. Star your teams there, then use <b>My teams</b> to see only your requests.</li>
+      <li><b>Filters</b> (${kb('F')}) opens a panel to pick several teams, statuses, methods or hosts at once, flip any of them to <i>Is not</i>, and set a minimum duration. Every CODEOWNERS team is listed (with 0 until it makes a request), so you can star yours before capturing anything, then use <b>My teams</b> to see only your requests.</li>
     </ul>
     <h3>What Counts as Identical</h3>
     ${art('dupes', 'GETs are identical by URL; POSTs only when the body matches; POSTs without a captured body are never flagged')}
@@ -84,16 +85,17 @@ const HELP = [
     <ul>
       <li><b>Time Format</b> and <b>Theme</b>: how times read, and Dark, Light, Navy or Orange. Both are remembered.</li>
       <li><b>Reset Columns</b>: back to the default column order and widths.</li>
-      <li><b>Export…</b>: JSON, CSV or a markdown table of the capture or one phase.</li>
+      <li><b>Export…</b>: JSON, CSV, or a markdown table you can copy or save as a <code>.md</code> file, for the capture or one phase.</li>
       <li><b>Clear Highlights</b>: removes the highlight from every request. It is greyed out while nothing is highlighted.</li>
       <li><b>Log Storage</b>: how big the request log file is and where it lives. <b>Clear Log File</b> empties it. The requests on screen, your markers and your audit verdicts are not touched.</li>
+      <li><b>MetaMask Mobile</b> (desktop app only): the folder Foxy is using, with <b>Switch Folder…</b>.</li>
       <li><b>Clear</b>: a fresh capture. Request numbers start again at 1, and markers and highlights go.</li>
     </ul>
-    <h3>In the Desktop App</h3>
+    <h3>Why Two Menus in the Desktop App</h3>
+    <p>The menu button holds everything about the capture and the view. It is the same in the app, a browser tab and <code>yarn foxy</code>. The macOS menu bar holds only what needs the operating system:</p>
     <ul>
-      <li><b>File &gt; Switch MetaMask Mobile Folder…</b> (${kb('⌘')} ${kb('O')}) points Foxy at another checkout. <b>Recent Folders</b> remembers the last few. Foxy restarts to switch, and asks first if that would drop a capture.</li>
-      <li><b>Foxy &gt; Log Storage…</b> shows the same log size and folder, with buttons to empty the log or show it in Finder.</li>
-      <li><b>Foxy &gt; Show Data Folder</b> opens where Foxy keeps its log, audit verdicts and CODEOWNERS cache. <b>Copy MCP Config…</b> gives an agent access to the capture.</li>
+      <li><b>File &gt; Switch MetaMask Mobile Folder…</b> (${kb('⌘')} ${kb('O')}) points Foxy at another checkout. <b>Recent Folders</b> remembers the last few. Foxy restarts to switch, and asks first if that would drop a capture. <b>Show Folder in Finder</b> and <b>Set Up App for Foxy…</b> are here too.</li>
+      <li><b>Foxy &gt; Open Dashboard in Browser</b>, <b>Show Data Folder</b> (log, audit verdicts, CODEOWNERS cache) and <b>Copy MCP Config…</b> (gives an agent access to the capture).</li>
     </ul>` },
 
   { id: 'keys', em: '⌨️', title: 'Shortcuts', html: () => `

@@ -49,6 +49,7 @@ const adv = {
   minMs: 0,
 };
 const fq = { team: '', view: '', host: '' }; // search text inside the long lists
+let allTeams = []; // every team in CODEOWNERS (app and core), so you can pick yours before it has made a request
 let myTeams = new Set(); try { myTeams = new Set(JSON.parse(localStorage.getItem('foxy.myteams.v1')) || []); } catch {}
 let dupeCounts = new Map(); let span = 1; let wfMarkers = ''; let axis = null; // axis: see buildAxis()
 let openEp = null; let pendingEp = false;

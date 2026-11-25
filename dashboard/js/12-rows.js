@@ -17,7 +17,7 @@ function phaseHeader(p, cols) {
   const tot = p.n || 1, w = (k) => ((p[k] / tot) * 100).toFixed(1);
   const mix = p.n ? `<span class="ph-mix" title="${p.ours} owned · ${p.third} third-party · ${p.unowned} unowned"><i class="ours" style="width:${w('ours')}%"></i><i class="third" style="width:${w('third')}%"></i><i class="unowned" style="width:${w('unowned')}%"></i></span>` : '';
   const pill = (cls, text, tip) => `<span class="ph-pill ${cls}" title="${esc(tip)}">${text}</span>`;
-  const pills = !p.n ? pill('quiet', '🌙 quiet · no requests', 'Nothing was requested during this phase')
+  const pills = !p.n ? pill('quiet', `${icon('quiet')}quiet · no requests`, 'Nothing was requested during this phase')
     : [pill('', `${p.n} request${p.n > 1 ? 's' : ''}`, 'Requests made during this phase'),
       p.newEps ? pill('new', `${p.newEps} new endpoint${p.newEps > 1 ? 's' : ''}`, 'Endpoints first seen in this phase') : '',
       p.dupes ? pill('dup', `${p.dupes} identical dupe${p.dupes > 1 ? 's' : ''}`, 'Repeats of a request already made earlier in the capture') : '',

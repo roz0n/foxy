@@ -8,7 +8,7 @@ import { readFile, readdir, mkdir, appendFile, writeFile, stat } from 'node:fs/p
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { WebSocketServer } from 'ws';
-import { loadCodeowners, resolveFrameOwners } from './codeowners.mjs';
+import { loadCodeowners, resolveFrameOwners, teamsIn } from './codeowners.mjs';
 import { createViewIndexer } from './views.mjs';
 import { createPackageLinker, createTagIndex } from './packages.mjs';
 import {
@@ -621,6 +621,8 @@ const httpServer = createServer(async (req, res) => {
         broadcast({ type: 'markers', markers: sessionMarkers(latestSession) });
         json(res, { ok: true });
       }
+    } else if (p === '/api/owners') {
+      json(res, { teams: teamsIn(repoRules, coreRules) });
     } else if (p === '/api/storage') {
       json(res, await storageInfo());
     } else if (p === '/api/storage/clear' && req.method === 'POST') {

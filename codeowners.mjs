@@ -64,6 +64,13 @@ export function ownersFor(rules, path) {
   return null;
 }
 
+/** Every team named in the given rule sets, as `core-platform` rather than `@MetaMask/core-platform`, A to Z. People and emails are left out. */
+export function teamsIn(...ruleSets) {
+  const teams = new Set();
+  for (const rules of ruleSets) for (const rule of rules || []) for (const o of rule.owners) if (/^@metamask\//i.test(o)) teams.add(o.replace(/^@metamask\//i, ''));
+  return [...teams].sort((a, b) => a.localeCompare(b));
+}
+
 export function loadCodeowners(file) {
   try {
     if (file && existsSync(file)) return parseCodeowners(readFileSync(file, 'utf8'));

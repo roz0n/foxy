@@ -24,6 +24,7 @@
   <symbol id="i-search" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25a1 1 0 0 0 1.42-1.42l-4.25-4.24A7.5 7.5 0 0 0 10.5 3zm0 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></symbol>
   <symbol id="i-flag" viewBox="0 0 24 24"><path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6z"/></symbol>
   <symbol id="i-hl" viewBox="0 0 24 24"><path d="M15.6 3.4a1.6 1.6 0 0 1 2.2 0l2.8 2.8a1.6 1.6 0 0 1 0 2.2l-8.3 8.3-5-5z"/><path d="M6.4 12.6l5 5-1.9 1.9H4.5v-5z"/><rect x="3" y="20.5" width="9" height="1.8" rx=".9"/></symbol>
+  <symbol id="i-quiet" viewBox="0 0 24 24"><path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1z"/></symbol>
   <symbol id="i-reset" viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
   <symbol id="i-clipboard" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M9 2h6a1.5 1.5 0 0 1 1.5 1.5V4H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1.5v-.5A1.5 1.5 0 0 1 9 2zM8 11v1.6h8V11H8zm0 4v1.6h5.5V15H8z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
@@ -62,6 +63,9 @@
   <span class="spacer"></span>
   <button id="helpBtn" class="btn icon-btn" aria-haspopup="dialog" aria-label="Help" title="Guide: how Foxy and markers work (?)"><svg class="ic"><use href="#i-help"/></svg></button>
   <div class="actions" id="actions" role="group" aria-label="Actions">
+    <div class="menu-row desk" id="deskRow" hidden><span class="mr-l">MetaMask Mobile</span><div class="store-info" id="deskDir"></div></div>
+    <button id="deskSwitch" class="btn" hidden title="Point Foxy at another MetaMask Mobile checkout (File menu, Cmd+O)"><svg class="ic"><use href="#i-reset"/></svg><span>Switch Folder…</span></button>
+    <div class="sep" id="deskSep" role="separator" hidden></div>
     <div class="menu-row"><span class="mr-l" id="tfLabel">Time Format</span><div class="tfmt" id="timeSeg" role="group" aria-labelledby="tfLabel"></div></div>
     <div class="sep" role="separator"></div>
     <div class="menu-row"><span class="mr-l" id="themeLabel">Theme</span><div class="themes" id="themeGrid" role="radiogroup" aria-labelledby="themeLabel"></div></div>

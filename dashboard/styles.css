@@ -111,18 +111,20 @@ tr.req { cursor: pointer; } tr.req:hover td, tr.req.open td { background: var(--
 tr.req.hl td, tr.ep.hl td { background: color-mix(in srgb, var(--hl) 12%, transparent); }
 tr.req.hl:hover td, tr.req.hl.open td, tr.ep.hl:hover td, tr.ep.hl.open td { background: color-mix(in srgb, var(--hl) 19%, transparent); }
 tr.req.hl > td:first-child, tr.ep.hl > td:first-child { color: var(--hl); font-weight: 600; }
+tr.req.hl td, tr.ep.hl td { border-bottom-color: color-mix(in srgb, var(--hl) 30%, transparent); }
 .hl-switch { flex: none; margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-ctl); background: var(--fill-1); color: var(--color-text-alternative); cursor: pointer; transition: background .15s, color .15s; }
 .hl-switch .ic { width: 15px; height: 15px; }
 .hl-switch:hover { color: var(--color-text-default); background: var(--fill-2); }
 .hl-switch[aria-pressed="true"] { color: #fff; background: var(--hl); }
 .store-info { font-size: 12.5px; line-height: 1.4; color: var(--color-text-default); }
 .store-info code { display: block; margin-top: 2px; font: 11px/1.4 var(--font-family-mono); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.actions [hidden] { display: none !important; }
 .actions .btn:disabled { opacity: .4; cursor: default; pointer-events: none; }
 .dot.hl { background: var(--hl); }
 /* method, host and path: the path is what tells requests apart, so it reads first */
 td.verb, .verb { font-weight: 600; color: var(--color-text-alternative); }
 td.host, .ep .host { color: var(--color-text-alternative); }
-.path { color: var(--color-text-default); font-weight: 500; }
+.path { color: var(--color-text-default); font-weight: 600; }
 tr.marker td { background: var(--color-warning-muted); color: var(--color-warning-default); font-weight: 600; white-space: normal; }
 .mono { font-family: var(--font-family-mono); font-size: 12px; }
 .num { font-variant-numeric: tabular-nums; }
@@ -464,6 +466,7 @@ tr.phase:hover td { background: color-mix(in srgb, var(--pc) 15%, var(--color-ba
 .ph-pills { display: inline-flex; flex-wrap: wrap; gap: 5px; }
 .ph-pill { display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border-radius: var(--r-box); font-size: 11.5px; font-weight: 600; line-height: 1.6; color: var(--color-text-alternative); background: var(--color-background-section); border: 1px solid var(--color-border-muted); }
 .ph-pill.new { color: var(--color-primary-default); } .ph-pill.dup { color: var(--brand-colors-orange-orange300); } .ph-pill.bad { color: var(--color-error-default); }
+.ph-pill .ic { width: 12px; height: 12px; }
 .ph-pill.quiet { color: var(--color-success-default); background: var(--color-success-muted); border-color: transparent; }
 .ph-actions { margin-left: auto; display: inline-flex; gap: 4px; }
 /* every toolbar icon is the same size in a 26px round control, so the phase header and the Markers rows line up */
@@ -587,9 +590,9 @@ pre.art .y { color: var(--art-y); } pre.art .r { color: var(--art-r); } pre.art 
 .callout p { margin: 0; color: var(--color-text-default); }
 .legend2 { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0; color: var(--color-text-alternative); font-size: 12.5px; }
 .live { margin-top: 10px; padding: 10px 14px; border: 1px dashed var(--color-border-muted); border-radius: var(--r-box); }
-table.keys { border-collapse: collapse; width: 100%; max-width: 560px; table-layout: auto; }
+table.keys { border-collapse: collapse; width: 100%; max-width: 640px; table-layout: auto; }
 table.keys td { padding: 6px 4px; border-bottom: 1px solid var(--color-border-muted); white-space: normal; overflow: visible; color: var(--color-text-alternative); }
-table.keys td:first-child { width: 150px; white-space: nowrap; }
+table.keys td:first-child { width: 1%; white-space: nowrap; }
 @media (max-width: 900px) {
   .hbody { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .hnav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--color-border-muted); }
@@ -655,7 +658,7 @@ pre.art { margin: 14px 0 8px; padding: 14px 18px; }
 .callout.tip { border-color: color-mix(in srgb, var(--color-success-default) 35%, transparent); }
 .live { margin-top: 26px; padding: 14px 18px; }
 .hfoot { padding: 12px 20px; }
-table.keys td { padding: 11px 6px; font-size: 14px; }
+table.keys td { padding: 6px 6px; font-size: 14px; }
 @media (max-width: 900px) { .hcontent { padding: 20px 20px 32px; } .hcontent h2 { font-size: 28px; } .hcontent .lede { font-size: 15.5px; } }
 
 /* markers panel: roomier, grouped by dividers */
@@ -789,8 +792,8 @@ html[data-theme="orange"] dialog#help::backdrop { background: rgba(14,6,0,.68); 
 .hcontent h3 { margin: 36px 0 10px; padding-top: 0; border-top: 0; }
 .step + .step, .lede + .step, pre.art + .step { border-top: 0; }
 .step { padding: 16px 0; }
-table.keys { border-collapse: separate; border-spacing: 0 4px; }
-table.keys td { border-bottom: 0; padding: 10px 14px; background: var(--fill-1); }
+table.keys { border-collapse: separate; border-spacing: 0 2px; }
+table.keys td { border-bottom: 0; padding: 5px 14px; background: var(--fill-1); }
 table.keys td:first-child { border-radius: var(--r-ctl) 0 0 var(--r-ctl); }
 table.keys td:last-child { border-radius: 0 var(--r-ctl) var(--r-ctl) 0; }
 
